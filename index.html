@@ -105,6 +105,15 @@
         <button class="nav-item" data-section="history">
           <i data-lucide="history"></i><span>History</span>
         </button>
+        <button class="nav-item" data-section="analytics">
+          <i data-lucide="bar-chart-2"></i><span>Analytics</span>
+        </button>
+        <button class="nav-item" data-section="calendar">
+          <i data-lucide="calendar-days"></i><span>Calendar</span>
+        </button>
+        <button class="nav-item" data-section="budget">
+          <i data-lucide="target"></i><span>Budget Planner</span>
+        </button>
         <button class="nav-item" data-section="bills">
           <i data-lucide="receipt"></i><span>Bills &amp; Receipts</span>
         </button>
@@ -340,6 +349,77 @@
             <div class="transaction-list" id="history-list">
               <div class="empty-state"><i data-lucide="inbox"></i><p>No transactions yet.</p></div>
             </div>
+          </div>
+        </section>
+
+        <!-- ── ANALYTICS ─────────────────────────── -->
+        <section id="section-analytics" class="section">
+          <div class="card">
+            <div class="card-header">
+              <h3>Analytics</h3>
+              <div class="atab-group">
+                <button class="atab active" data-tab="weekly">Weekly</button>
+                <button class="atab" data-tab="monthly">Monthly</button>
+              </div>
+            </div>
+            <div id="analytics-weekly" class="analytics-pane">
+              <div class="chart-container" style="height:240px"><canvas id="weeklyChart"></canvas></div>
+              <div id="weekly-stats" class="analytics-stats"></div>
+            </div>
+            <div id="analytics-monthly" class="analytics-pane hidden">
+              <div class="chart-container" style="height:240px"><canvas id="monthlyChart"></canvas></div>
+              <div id="monthly-stats" class="analytics-stats"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── CALENDAR ──────────────────────────── -->
+        <section id="section-calendar" class="section">
+          <div class="card">
+            <div class="card-header cal-card-header">
+              <button class="btn ghost icon-btn" id="cal-prev"><i data-lucide="chevron-left"></i></button>
+              <h3 id="cal-month-label">—</h3>
+              <button class="btn ghost icon-btn" id="cal-next"><i data-lucide="chevron-right"></i></button>
+            </div>
+            <div class="cal-dow-row">
+              <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span>
+              <span>Thu</span><span>Fri</span><span>Sat</span>
+            </div>
+            <div id="calendar-grid" class="cal-grid"></div>
+          </div>
+          <div id="cal-day-detail" class="card cal-day-detail hidden">
+            <div class="cal-detail-header">
+              <h4 id="cal-detail-title">Transactions</h4>
+              <button class="btn ghost icon-btn" id="cal-detail-close"><i data-lucide="x"></i></button>
+            </div>
+            <div id="cal-detail-list" class="transaction-list"></div>
+          </div>
+        </section>
+
+        <!-- ── BUDGET PLANNER ────────────────────── -->
+        <section id="section-budget" class="section">
+          <div class="budget-page-header">
+            <div>
+              <h2>Budget Planner</h2>
+              <p id="budget-month-label" class="budget-month-sub">—</p>
+            </div>
+            <button class="btn primary" id="budget-edit-btn">
+              <i data-lucide="settings-2"></i> Set Budgets
+            </button>
+          </div>
+          <div class="card budget-edit-panel hidden" id="budget-edit-panel">
+            <div class="card-header">
+              <h3>Monthly Budget Limits</h3>
+              <button class="btn primary small" id="budget-save-btn">
+                <i data-lucide="check"></i> Save
+              </button>
+            </div>
+            <div class="budget-edit-grid" id="budget-edit-grid"></div>
+          </div>
+          <div id="budget-cards-wrap" class="budget-cards-wrap"></div>
+          <div id="budget-empty" class="empty-state card">
+            <i data-lucide="target"></i>
+            <p>No budgets set yet.<br>Tap "Set Budgets" to get started.</p>
           </div>
         </section>
 

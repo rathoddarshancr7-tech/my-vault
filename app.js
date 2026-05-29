@@ -2,7 +2,12 @@
 
 // ── State ──────────────────────────────────────────────────────────
 let transactions  = [];
+let budgets       = {};   // { category: monthlyLimit }
 let chartInstance = null;
+let weeklyChartInst  = null;
+let monthlyChartInst = null;
+let calYear  = new Date().getFullYear();
+let calMonth = new Date().getMonth();
 let currentPassword = '';
 let currentSection  = 'dashboard';
 let currentBill     = null; // { name, type, data }
@@ -109,7 +114,10 @@ const PAYMENT_MODES = {
 const SECTION_TITLES = {
   dashboard: 'Dashboard',
   add:       'Add Transaction',
+  analytics: 'Analytics',
   history:   'History',
+  calendar:  'Calendar',
+  budget:    'Budget Planner',
   bills:     'Bills & Receipts',
 };
 
@@ -179,11 +187,14 @@ async function unlockVault() {
   const stored = localStorage.getItem('vault_data');
   if (stored) {
     let dec = await decryptData(stored, pwd);
-    if (!dec) { dec = await decryptLegacy(stored, pwd); if (dec) { currentPassword = pwd; transactions = dec; await saveData(); } }
-    if (dec) { transactions = dec; currentPassword = pwd; showApp(); }
-    else vaultError.classList.remove('hidden');
+    if (!dec) { dec = await decryptLegacy(stored, pwd); }
+    if (dec) {
+      if (Array.isArray(dec)) { transactions = dec; budgets = {}; }
+      else { transactions = dec.transactions || []; budgets = dec.budgets || {}; }
+      currentPassword = pwd; await saveData(); showApp();
+    } else vaultError.classList.remove('hidden');
   } else {
-    transactions = []; currentPassword = pwd; await saveData(); showApp();
+    transactions = []; budgets = {}; currentPassword = pwd; await saveData(); showApp();
   }
   unlockText.textContent = 'Unlock Vault';
   unlockSpinner.classList.add('hidden');
@@ -191,10 +202,10 @@ async function unlockVault() {
 }
 async function saveData() {
   if (!currentPassword) return;
-  localStorage.setItem('vault_data', await encryptData(transactions, currentPassword));
+  localStorage.setItem('vault_data', await encryptData({ transactions, budgets }, currentPassword));
 }
 function lockVault() {
-  transactions = []; currentPassword = ''; passwordInput.value = '';
+  transactions = []; budgets = {}; currentPassword = ''; passwordInput.value = '';
   vaultError.classList.add('hidden');
   appShell.classList.remove('visible'); appShell.classList.add('hidden');
   vaultScreen.classList.remove('screen'); vaultScreen.classList.add('screen','active');
@@ -222,9 +233,12 @@ function showSection(name) {
   topbarTitle.textContent = SECTION_TITLES[name] || name;
   currentSection = name;
 
-  if (name === 'history') renderHistory();
-  if (name === 'bills')   renderBills();
+  if (name === 'history')   renderHistory();
+  if (name === 'bills')     renderBills();
   if (name === 'dashboard') updateDashboard();
+  if (name === 'analytics') renderAnalytics();
+  if (name === 'calendar')  renderCalendar();
+  if (name === 'budget')    renderBudget();
 
   // Close sidebar on mobile
   closeSidebar();
@@ -618,6 +632,280 @@ function exportPDF() {
   showToast('PDF downloaded!');
 }
 
+// ── Analytics ──────────────────────────────────────────────────────
+const BUDGET_CATEGORIES = [
+  { key:'Food',          emoji:'🍔', color:'#f59e0b' },
+  { key:'Travel',        emoji:'✈️', color:'#3b82f6' },
+  { key:'Rent',          emoji:'🏠', color:'#8b5cf6' },
+  { key:'Electricity',   emoji:'⚡', color:'#f97316' },
+  { key:'Grocery',       emoji:'🛒', color:'#10b981' },
+  { key:'Shopping',      emoji:'🛍️', color:'#ec4899' },
+  { key:'Online Orders', emoji:'📦', color:'#06b6d4' },
+  { key:'Miscellaneous', emoji:'📋', color:'#6b7280' },
+  { key:'Lending Money', emoji:'💸', color:'#ef4444' },
+];
+
+function lineChartOptions(color) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: c => ` ₹${c.parsed.y.toFixed(2)}` } }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { family:'Outfit', size:11 }, color:'#4c4780' } },
+      y: { beginAtZero: true, grid: { color:'rgba(99,102,241,.08)' },
+           ticks: { font:{ family:'Outfit', size:11 }, color:'#4c4780',
+                    callback: v => v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${v}` } }
+    }
+  };
+}
+
+function renderAnalytics() {
+  renderWeeklyChart();
+  // tab listeners wired once via event delegation below
+}
+
+function renderWeeklyChart() {
+  const days = [], amounts = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const ds = d.toISOString().slice(0,10);
+    const spend = transactions.filter(t => t.type==='expense' && t.date===ds)
+                              .reduce((s,t) => s+t.amount, 0);
+    days.push(d.toLocaleDateString('en-IN',{weekday:'short',day:'numeric'}));
+    amounts.push(parseFloat(spend.toFixed(2)));
+  }
+  const ctx = $('weeklyChart').getContext('2d');
+  if (weeklyChartInst) { weeklyChartInst.destroy(); weeklyChartInst = null; }
+  weeklyChartInst = new Chart(ctx, {
+    type:'line',
+    data:{ labels:days, datasets:[{
+      label:'Spend', data:amounts,
+      borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,.1)',
+      fill:true, tension:0.4,
+      pointBackgroundColor:'#6366f1', pointRadius:5, pointHoverRadius:7
+    }]},
+    options: lineChartOptions('#6366f1')
+  });
+  const total = amounts.reduce((s,a)=>s+a,0);
+  const maxAmt = amounts.length ? Math.max(...amounts) : 0;
+  const maxDay = maxAmt > 0 ? days[amounts.indexOf(maxAmt)] : '—';
+  $('weekly-stats').innerHTML = `
+    <div class="astat"><span class="astat-label">Week Total</span><span class="astat-value">₹${total.toFixed(2)}</span></div>
+    <div class="astat"><span class="astat-label">Daily Avg</span><span class="astat-value">₹${(total/7).toFixed(2)}</span></div>
+    <div class="astat"><span class="astat-label">Highest Day</span><span class="astat-value">${maxDay}</span></div>`;
+}
+
+function renderMonthlyChart() {
+  const labels = [], amounts = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const y = d.getFullYear(), m = d.getMonth();
+    const spend = transactions
+      .filter(t => { if (t.type!=='expense') return false; const [ty,tm]=t.date.split('-').map(Number); return ty===y && tm-1===m; })
+      .reduce((s,t)=>s+t.amount, 0);
+    labels.push(d.toLocaleDateString('en-IN',{month:'short',year:'2-digit'}));
+    amounts.push(parseFloat(spend.toFixed(2)));
+  }
+  const ctx = $('monthlyChart').getContext('2d');
+  if (monthlyChartInst) { monthlyChartInst.destroy(); monthlyChartInst = null; }
+  monthlyChartInst = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[{
+      label:'Spend', data:amounts,
+      borderColor:'#8b5cf6', backgroundColor:'rgba(139,92,246,.1)',
+      fill:true, tension:0.4,
+      pointBackgroundColor:'#8b5cf6', pointRadius:5, pointHoverRadius:7
+    }]},
+    options: lineChartOptions('#8b5cf6')
+  });
+  const total = amounts.reduce((s,a)=>s+a,0);
+  const maxAmt = amounts.length ? Math.max(...amounts) : 0;
+  const maxMon = maxAmt > 0 ? labels[amounts.indexOf(maxAmt)] : '—';
+  $('monthly-stats').innerHTML = `
+    <div class="astat"><span class="astat-label">Year Total</span><span class="astat-value">₹${total.toFixed(2)}</span></div>
+    <div class="astat"><span class="astat-label">Monthly Avg</span><span class="astat-value">₹${(total/12).toFixed(2)}</span></div>
+    <div class="astat"><span class="astat-label">Highest Month</span><span class="astat-value">${maxMon}</span></div>`;
+}
+
+// Analytics tab switching
+document.addEventListener('click', e => {
+  const tab = e.target.closest('.atab');
+  if (!tab) return;
+  const tabGroup = tab.closest('.atab-group');
+  if (!tabGroup) return;
+  tabGroup.querySelectorAll('.atab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  const which = tab.dataset.tab;
+  $('analytics-weekly').classList.toggle('hidden', which !== 'weekly');
+  $('analytics-monthly').classList.toggle('hidden', which !== 'monthly');
+  if (which === 'weekly') renderWeeklyChart();
+  else renderMonthlyChart();
+});
+
+// ── Calendar ───────────────────────────────────────────────────────
+function renderCalendar() {
+  $('cal-month-label').textContent =
+    new Date(calYear, calMonth, 1).toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+
+  const firstDay   = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const todayStr   = new Date().toISOString().slice(0,10);
+
+  // Daily totals
+  const dailyTotals = {};
+  for (const tx of transactions) {
+    if (tx.type !== 'expense') continue;
+    const [y,m,d] = tx.date.split('-').map(Number);
+    if (y === calYear && m-1 === calMonth)
+      dailyTotals[d] = (dailyTotals[d]||0) + tx.amount;
+  }
+  const maxDaily = Math.max(0, ...Object.values(dailyTotals));
+
+  let html = '';
+  for (let i = 0; i < firstDay; i++) html += '<div class="cal-cell empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const spend = dailyTotals[d] || 0;
+    const isToday = ds === todayStr;
+    let tier = '';
+    if (spend > 0) {
+      const pct = maxDaily > 0 ? spend/maxDaily*100 : 0;
+      tier = pct >= 70 ? 'cal-high' : pct >= 35 ? 'cal-mid' : 'cal-low';
+    }
+    const amt = spend > 0
+      ? `<span class="cal-day-spend">${spend>=1000 ? (spend/1000).toFixed(1)+'k' : spend.toFixed(0)}</span>`
+      : '';
+    html += `<div class="cal-cell ${tier}${isToday?' cal-today':''}" data-date="${ds}">
+      <span class="cal-day-num">${d}</span>${amt}</div>`;
+  }
+  $('calendar-grid').innerHTML = html;
+  $('cal-day-detail').classList.add('hidden');
+  lucide.createIcons();
+}
+
+$('calendar-grid') && document.addEventListener('click', e => {
+  const cell = e.target.closest('.cal-cell:not(.empty)');
+  if (!cell || !cell.dataset.date) return;
+  if (!cell.closest('#calendar-grid')) return;
+  const txs = transactions.filter(t => t.type==='expense' && t.date===cell.dataset.date);
+  const detail = $('cal-day-detail');
+  const d = new Date(cell.dataset.date+'T00:00:00');
+  $('cal-detail-title').textContent =
+    d.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
+  const list = $('cal-detail-list');
+  if (!txs.length) {
+    list.innerHTML = '<div class="empty-state"><p style="padding:20px">No expenses this day.</p></div>';
+  } else {
+    renderTxList(list, txs, false);
+    lucide.createIcons();
+  }
+  detail.classList.remove('hidden');
+  detail.scrollIntoView({behavior:'smooth', block:'nearest'});
+});
+
+// ── Budget Planner ─────────────────────────────────────────────────
+function budgetColorClass(pct) {
+  if (pct > 100) return 'b-over';
+  if (pct >= 86)  return 'b-red';
+  if (pct >= 61)  return 'b-warn';
+  return 'b-ok';
+}
+function budgetBarColor(pct) {
+  if (pct > 100) return '#991b1b';
+  if (pct >= 86)  return '#ef4444';
+  if (pct >= 61)  return '#f59e0b';
+  return '#10b981';
+}
+function budgetStatusLabel(pct) {
+  if (pct > 100) return '🔴 Over Budget!';
+  if (pct >= 86)  return '🚨 Critical';
+  if (pct >= 61)  return '⚠️ Warning';
+  return '✅ On Track';
+}
+
+function renderBudget() {
+  const now = new Date();
+  $('budget-month-label').textContent =
+    now.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+
+  const curMonth = now.getMonth(), curYear = now.getFullYear();
+  const catSpend = {};
+  for (const tx of transactions) {
+    if (tx.type !== 'expense') continue;
+    const [y,m] = tx.date.split('-').map(Number);
+    if (y===curYear && m-1===curMonth)
+      catSpend[tx.category] = (catSpend[tx.category]||0) + tx.amount;
+  }
+
+  const activeBudgets = BUDGET_CATEGORIES.filter(c => budgets[c.key] > 0);
+  const wrap = $('budget-cards-wrap');
+  const empty = $('budget-empty');
+
+  if (!activeBudgets.length) {
+    wrap.innerHTML = ''; empty.classList.remove('hidden'); return;
+  }
+  empty.classList.add('hidden');
+
+  wrap.innerHTML = activeBudgets.map(cat => {
+    const limit  = budgets[cat.key];
+    const spent  = catSpend[cat.key] || 0;
+    const pct    = (spent/limit)*100;
+    const cls    = budgetColorClass(pct);
+    const barClr = budgetBarColor(pct);
+    const remaining = limit - spent;
+    const remStr = remaining >= 0
+      ? `₹${remaining.toFixed(0)} left`
+      : `₹${Math.abs(remaining).toFixed(0)} over`;
+    return `
+      <div class="budget-card">
+        <div class="budget-card-header">
+          <div class="budget-cat-info">
+            <span class="budget-cat-emoji">${cat.emoji}</span>
+            <div>
+              <div class="budget-cat-name">${cat.key}</div>
+              <div class="budget-cat-sub">₹${spent.toFixed(0)} of ₹${limit.toFixed(0)}</div>
+            </div>
+          </div>
+          <span class="budget-pct-badge ${cls}">${pct.toFixed(0)}%</span>
+        </div>
+        <div class="budget-bar-track">
+          <div class="budget-bar-fill" style="width:${Math.min(pct,100).toFixed(1)}%;background:${barClr}"></div>
+        </div>
+        <div class="budget-card-footer">
+          <span class="budget-status ${cls}">${budgetStatusLabel(pct)}</span>
+          <span class="budget-remaining">${remStr}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openBudgetEdit() {
+  const panel = $('budget-edit-panel');
+  panel.classList.remove('hidden');
+  $('budget-edit-grid').innerHTML = BUDGET_CATEGORIES.map(cat => `
+    <div class="budget-edit-row">
+      <label class="budget-edit-label"><span>${cat.emoji}</span>${cat.key}</label>
+      <div class="input-with-icon">
+        <span class="input-prefix">₹</span>
+        <input type="number" class="budget-input" data-cat="${cat.key}"
+               value="${budgets[cat.key]||''}" placeholder="0" min="0" step="100">
+      </div>
+    </div>`).join('');
+}
+
+async function saveBudgets() {
+  document.querySelectorAll('.budget-input').forEach(inp => {
+    budgets[inp.dataset.cat] = parseFloat(inp.value) || 0;
+  });
+  await saveData();
+  $('budget-edit-panel').classList.add('hidden');
+  renderBudget();
+  showToast('Budgets saved!');
+}
+
 // ── Form Events ────────────────────────────────────────────────────
 
 // Payee: required when amount > 5000
@@ -739,6 +1027,19 @@ bnavMenu.addEventListener('click', openSidebar);
 
 topbarAddBtn.addEventListener('click', () => showSection('add'));
 dismissBtn.addEventListener('click', () => weeklyReminder.classList.add('hidden'));
+
+// Calendar nav
+$('cal-prev').addEventListener('click', () => {
+  calMonth--; if (calMonth<0){calMonth=11;calYear--;} renderCalendar();
+});
+$('cal-next').addEventListener('click', () => {
+  calMonth++; if (calMonth>11){calMonth=0;calYear++;} renderCalendar();
+});
+$('cal-detail-close').addEventListener('click', () => $('cal-day-detail').classList.add('hidden'));
+
+// Budget edit / save
+$('budget-edit-btn').addEventListener('click', openBudgetEdit);
+$('budget-save-btn').addEventListener('click', saveBudgets);
 
 // Nav items (sidebar + bottom nav)
 document.addEventListener('click', e => {
