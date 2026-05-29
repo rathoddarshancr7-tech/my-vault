@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>My Vault</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+
+  <!-- Toast -->
+  <div id="toast" class="toast">
+    <div class="toast-inner">
+      <i data-lucide="check-circle" class="toast-icon"></i>
+      <span id="toast-message">Message</span>
+    </div>
+  </div>
+
+  <!-- Bill Preview Modal -->
+  <div id="bill-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <h3 id="modal-title">Receipt</h3>
+          <p id="modal-subtitle" class="modal-subtitle"></p>
+        </div>
+        <button id="close-modal-btn" class="btn ghost icon-btn"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <img id="modal-bill-img" src="" alt="Receipt" class="modal-img hidden">
+        <div id="modal-pdf-box" class="modal-pdf-box hidden">
+          <i data-lucide="file-text"></i><span>PDF Receipt</span>
+        </div>
+        <div class="modal-details" id="modal-details"></div>
+      </div>
+      <div class="modal-footer">
+        <a id="modal-download" href="" download="" class="btn outline full-width">
+          <i data-lucide="download"></i> Download Receipt
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── VAULT SCREEN ──────────────────────────────────────────── -->
+  <div id="vault-screen" class="screen active">
+    <div class="vault-card">
+      <div class="vault-icon-wrapper"><i data-lucide="shield" class="vault-icon"></i></div>
+      <h1>My Vault</h1>
+      <p class="vault-subtitle">Your finances, encrypted &amp; private.</p>
+      <div class="vault-form">
+        <div class="password-wrapper">
+          <i data-lucide="lock" class="input-icon"></i>
+          <input type="password" id="vault-password" placeholder="Enter password" autocomplete="current-password">
+          <button type="button" id="toggle-password" class="toggle-pw-btn">
+            <i data-lucide="eye" id="pw-eye-icon"></i>
+          </button>
+        </div>
+        <button id="unlock-btn" class="btn primary full-width">
+          <span id="unlock-text">Unlock Vault</span>
+          <span id="unlock-spinner" class="spinner hidden"></span>
+        </button>
+      </div>
+      <p id="vault-error" class="error-text hidden"><i data-lucide="alert-circle"></i> Incorrect password.</p>
+      <p class="vault-hint">New here? Enter any password to create your vault.</p>
+    </div>
+  </div>
+
+  <!-- ── APP SHELL ─────────────────────────────────────────────── -->
+  <div id="app-shell" class="hidden">
+
+    <!-- Sidebar overlay (mobile) -->
+    <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo"><i data-lucide="shield"></i></div>
+        <span class="brand-name">My Vault</span>
+        <button id="sidebar-close-btn" class="sidebar-close-btn"><i data-lucide="x"></i></button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-section="dashboard">
+          <i data-lucide="layout-dashboard"></i><span>Dashboard</span>
+        </button>
+        <button class="nav-item" data-section="add">
+          <i data-lucide="plus-circle"></i><span>Add Transaction</span>
+        </button>
+        <button class="nav-item" data-section="history">
+          <i data-lucide="history"></i><span>History</span>
+        </button>
+        <button class="nav-item" data-section="bills">
+          <i data-lucide="receipt"></i><span>Bills &amp; Receipts</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="nav-item" id="export-btn">
+          <i data-lucide="file-down"></i><span>Export PDF</span>
+        </button>
+        <button class="nav-item nav-danger" id="lock-btn">
+          <i data-lucide="log-out"></i><span>Lock Vault</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main wrapper -->
+    <div class="main-wrapper">
+
+      <!-- Topbar (visible on mobile) -->
+      <header class="topbar">
+        <button class="topbar-menu-btn" id="menu-btn"><i data-lucide="menu"></i></button>
+        <span class="topbar-title" id="topbar-title">Dashboard</span>
+        <button class="btn primary icon-btn" data-section="add" id="topbar-add-btn">
+          <i data-lucide="plus"></i>
+        </button>
+      </header>
+
+      <!-- Sections -->
+      <main class="content-area">
+
+        <!-- ── DASHBOARD ──────────────────────────── -->
+        <section id="section-dashboard" class="section active">
+
+          <div id="weekly-reminder" class="alert-banner hidden">
+            <i data-lucide="bell"></i>
+            <span><strong>Heads up!</strong> No expenses logged in over 7 days.</span>
+            <button id="dismiss-reminder-btn" class="btn ghost icon-btn"><i data-lucide="x"></i></button>
+          </div>
+
+          <div class="summary-grid">
+            <div class="stat-card card-spent">
+              <div class="stat-icon"><i data-lucide="trending-down"></i></div>
+              <div class="stat-body">
+                <span class="stat-label">Total Spent</span>
+                <span id="total-expense" class="stat-value">₹0.00</span>
+              </div>
+            </div>
+            <div class="stat-card card-month">
+              <div class="stat-icon"><i data-lucide="calendar"></i></div>
+              <div class="stat-body">
+                <span class="stat-label">This Month</span>
+                <span id="total-month" class="stat-value">₹0.00</span>
+              </div>
+            </div>
+            <div class="stat-card card-count">
+              <div class="stat-icon"><i data-lucide="layers"></i></div>
+              <div class="stat-body">
+                <span class="stat-label">Transactions</span>
+                <span id="total-count" class="stat-value">0</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="dashboard-grid">
+            <div class="card chart-card">
+              <div class="card-header"><h3>Spending by Category</h3></div>
+              <div class="chart-container">
+                <canvas id="expenseChart"></canvas>
+                <div id="chart-empty" class="chart-empty hidden">
+                  <i data-lucide="pie-chart"></i><span>No expense data yet</span>
+                </div>
+              </div>
+            </div>
+            <div class="card top-card">
+              <div class="card-header"><h3>Top Categories</h3></div>
+              <div id="top-categories" class="top-cat-list">
+                <p class="empty-small">No data yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>Recent Transactions</h3>
+              <button class="btn ghost small" data-section="history">View all →</button>
+            </div>
+            <div class="transaction-list" id="recent-list">
+              <div class="empty-state"><i data-lucide="inbox"></i><p>No transactions yet.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── ADD TRANSACTION ────────────────────── -->
+        <section id="section-add" class="section">
+          <div class="card form-section">
+            <h3 class="form-title">New Transaction</h3>
+            <form id="transaction-form">
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="amount">Amount</label>
+                  <div class="input-with-icon">
+                    <span class="input-prefix">₹</span>
+                    <input type="number" id="amount" min="0.01" step="0.01" required placeholder="0.00">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="date">Date</label>
+                  <input type="date" id="date" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Payment Mode</label>
+                <div class="payment-modes" id="payment-modes">
+                  <button type="button" class="mode-chip active" data-mode="cash">💵 Cash</button>
+                  <button type="button" class="mode-chip" data-mode="paytm">🔵 Paytm</button>
+                  <button type="button" class="mode-chip" data-mode="phonepe">💜 PhonePe</button>
+                  <button type="button" class="mode-chip" data-mode="credit_card">💳 Credit Card</button>
+                  <button type="button" class="mode-chip" data-mode="debit_card">🏧 Debit Card</button>
+                  <button type="button" class="mode-chip" data-mode="upi">📱 UPI</button>
+                  <button type="button" class="mode-chip" data-mode="bank">🏦 Bank Transfer</button>
+                </div>
+                <input type="hidden" id="payment-mode" value="cash">
+              </div>
+
+              <div class="form-group" id="category-group">
+                <label for="category">Category</label>
+                <div class="select-wrapper">
+                  <select id="category" required>
+                    <option value="Food">🍔 Food</option>
+                    <option value="Travel">✈️ Travel</option>
+                    <option value="Rent">🏠 Rent</option>
+                    <option value="Electricity">⚡ Electricity</option>
+                    <option value="Grocery">🛒 Grocery</option>
+                    <option value="Shopping">🛍️ Shopping</option>
+                    <option value="Miscellaneous">📦 Miscellaneous</option>
+                    <option value="Lending Money">💸 Lending Money</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group hidden" id="payee-group">
+                <label for="payee">
+                  Paying to <span class="req-badge">Required for ₹5,000+</span>
+                </label>
+                <input type="text" id="payee" placeholder="e.g. Amazon, Landlord, Swiggy..." maxlength="80">
+              </div>
+
+              <div class="form-group">
+                <label for="note">Note <span class="optional">(optional)</span></label>
+                <input type="text" id="note" placeholder="Add a note..." maxlength="100">
+              </div>
+
+              <div class="form-group">
+                <label>Attach Bill / Receipt <span class="optional">(optional)</span></label>
+                <div class="upload-zone" id="upload-zone">
+                  <i data-lucide="upload-cloud" class="upload-icon"></i>
+                  <p>Drop file here or <span class="upload-link">browse</span></p>
+                  <p class="upload-hint">JPG, PNG or PDF · Max 5 MB</p>
+                  <input type="file" id="bill-file" accept="image/*,.pdf" hidden>
+                </div>
+                <div id="bill-preview" class="bill-preview hidden">
+                  <img id="bill-thumb" src="" alt="Preview" class="bill-thumb">
+                  <div class="bill-preview-info">
+                    <i data-lucide="file-check"></i>
+                    <span id="bill-name">receipt.jpg</span>
+                  </div>
+                  <button type="button" id="remove-bill-btn" class="btn ghost icon-btn">
+                    <i data-lucide="trash-2"></i>
+                  </button>
+                </div>
+              </div>
+
+              <button type="submit" class="btn primary full-width">
+                <i data-lucide="plus"></i> Add Transaction
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <!-- ── HISTORY ────────────────────────────── -->
+        <section id="section-history" class="section">
+          <div class="card">
+            <div class="card-header stack-on-mobile">
+              <h3>Transaction History</h3>
+              <div class="list-controls">
+                <div class="search-box">
+                  <i data-lucide="search" class="search-icon"></i>
+                  <input type="text" id="search-input" placeholder="Search...">
+                </div>
+                <select id="filter-type" class="filter-select">
+                  <option value="all">All</option>
+                  <option value="expense">Expenses</option>
+                </select>
+                <select id="filter-category" class="filter-select">
+                  <option value="all">All Categories</option>
+                  <option value="Food">Food</option>
+                  <option value="Travel">Travel</option>
+                  <option value="Rent">Rent</option>
+                  <option value="Electricity">Electricity</option>
+                  <option value="Grocery">Grocery</option>
+                  <option value="Shopping">Shopping</option>
+                  <option value="Miscellaneous">Miscellaneous</option>
+                  <option value="Lending Money">Lending Money</option>
+                </select>
+                <select id="filter-mode" class="filter-select">
+                  <option value="all">All Modes</option>
+                  <option value="cash">Cash</option>
+                  <option value="paytm">Paytm</option>
+                  <option value="phonepe">PhonePe</option>
+                  <option value="credit_card">Credit Card</option>
+                  <option value="debit_card">Debit Card</option>
+                  <option value="upi">UPI</option>
+                  <option value="bank">Bank</option>
+                </select>
+              </div>
+            </div>
+            <p id="history-count" class="history-count"></p>
+            <div class="transaction-list" id="history-list">
+              <div class="empty-state"><i data-lucide="inbox"></i><p>No transactions yet.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── BILLS ──────────────────────────────── -->
+        <section id="section-bills" class="section">
+          <div class="bills-page-header">
+            <h2>Bills &amp; Receipts</h2>
+            <p>Last 20 uploaded receipts</p>
+          </div>
+          <div class="empty-state card" id="bills-empty">
+            <i data-lucide="receipt"></i>
+            <p>No bills uploaded yet.<br>Attach a receipt when adding a transaction.</p>
+          </div>
+          <div id="bills-grid" class="bills-grid"></div>
+        </section>
+
+      </main>
+
+      <!-- Mobile Bottom Nav -->
+      <nav class="bottom-nav">
+        <button class="bnav-item active" data-section="dashboard">
+          <i data-lucide="layout-dashboard"></i><span>Home</span>
+        </button>
+        <button class="bnav-item" data-section="history">
+          <i data-lucide="history"></i><span>History</span>
+        </button>
+        <button class="bnav-fab" data-section="add">
+          <i data-lucide="plus"></i>
+        </button>
+        <button class="bnav-item" data-section="bills">
+          <i data-lucide="receipt"></i><span>Bills</span>
+        </button>
+        <button class="bnav-item" id="bnav-menu">
+          <i data-lucide="menu"></i><span>Menu</span>
+        </button>
+      </nav>
+
+    </div><!-- /main-wrapper -->
+  </div><!-- /app-shell -->
+
+  <script src="app.js"></script>
+</body>
+</html>
