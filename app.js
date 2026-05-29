@@ -271,11 +271,22 @@ async function unlockVault() {
     let dec = await decryptData(stored, pwd);
     if (!dec) { dec = await decryptLegacy(stored, pwd); }
     if (dec) {
-      if (Array.isArray(dec)) { transactions = dec; budgets = {}; }
-      else { transactions = dec.transactions || []; budgets = dec.budgets || {}; }
-      currentPassword = pwd; await saveData(); showApp(false);
+      let migrated = false;
+      if (Array.isArray(dec)) {
+        // Old format — plain array. Migrate to new object format.
+        transactions = dec; budgets = {}; migrated = true;
+      } else if (dec && typeof dec === 'object') {
+        // New format — { transactions, budgets }
+        transactions = Array.isArray(dec.transactions) ? dec.transactions : [];
+        budgets      = (dec.budgets && typeof dec.budgets === 'object') ? dec.budgets : {};
+      }
+      currentPassword = pwd;
+      // Only write back if we migrated format — never overwrite with empty
+      if (migrated && transactions.length > 0) await saveData();
+      showApp(false);
     } else vaultError.classList.remove('hidden');
   } else {
+    // Brand new vault — nothing stored yet
     transactions = []; budgets = {}; currentPassword = pwd; await saveData(); showApp(false);
   }
   unlockText.textContent = 'Unlock Vault';

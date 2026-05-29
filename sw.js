@@ -1,4 +1,4 @@
-const CACHE = 'my-vault-v2';
+const CACHE = 'my-vault-v3';
 
 const APP_SHELL = [
   './',
@@ -9,7 +9,7 @@ const APP_SHELL = [
   './icon.svg'
 ];
 
-// ── Install: cache app shell ──────────────────────────────
+// ── Install: pre-cache app shell ──────────────────────────────────
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
@@ -18,7 +18,7 @@ self.addEventListener('install', e => {
   );
 });
 
-// ── Activate: purge old caches ────────────────────────────
+// ── Activate: purge old caches ────────────────────────────────────
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
@@ -29,33 +29,36 @@ self.addEventListener('activate', e => {
   );
 });
 
-// ── Fetch: cache-first for own files, network-first for CDN ──
+// ── Fetch ─────────────────────────────────────────────────────────
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // Same-origin → cache first, fall back to network + store
+  // App shell files (HTML/CSS/JS) → NETWORK FIRST
+  // Always get the freshest code. Fall back to cache only if offline.
   if (url.origin === location.origin) {
     e.respondWith(
-      caches.match(e.request).then(cached => {
-        if (cached) return cached;
-        return fetch(e.request).then(res => {
+      fetch(e.request)
+        .then(res => {
+          // Store fresh copy in cache for offline use
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, copy));
           return res;
-        });
-      })
+        })
+        .catch(() => caches.match(e.request))
     );
     return;
   }
 
-  // CDN (fonts, Chart.js, Lucide, jsPDF) → network first, cache fallback
+  // CDN resources (fonts, Chart.js, Lucide, jsPDF) → CACHE FIRST
+  // These rarely change — serve instantly from cache.
   e.respondWith(
-    fetch(e.request)
-      .then(res => {
+    caches.match(e.request).then(cached => {
+      if (cached) return cached;
+      return fetch(e.request).then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));
         return res;
-      })
-      .catch(() => caches.match(e.request))
+      });
+    })
   );
 });
