@@ -123,6 +123,40 @@ button:not([disabled]), .mode-chip, .bill-card,
 }
 .toggle-pw-btn i { width: 16px; height: 16px; }
 .vault-hint { font-size: 0.78rem; color: var(--text-3); margin-top: 14px; }
+
+/* ── Face ID / Biometric ─────────────────────────────────────────── */
+.biometric-btn {
+  width: 100%; margin-top: 10px;
+  background: transparent;
+  border: 1.5px solid var(--border-dark);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 11px 16px;
+  font-size: 0.9rem; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all var(--transition);
+}
+.biometric-btn:hover { background: var(--accent-light); border-color: var(--accent); }
+.biometric-btn:active { transform: scale(0.97); }
+.faceid-icon { width: 22px; height: 22px; flex-shrink: 0; }
+.faceid-banner {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;
+  padding: 14px 16px;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  background: #1e1b4b;
+  animation: slideUpBanner .3s cubic-bezier(.4,0,.2,1);
+}
+@keyframes slideUpBanner { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.faceid-banner-inner {
+  max-width: 480px; margin: 0 auto;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.faceid-banner-icon { width: 28px; height: 28px; color: #a5b4fc; flex-shrink: 0; }
+.faceid-banner-text { flex: 1; min-width: 0; }
+.faceid-banner-text strong { display: block; font-size: 0.9rem; color: #fff; }
+.faceid-banner-text span  { font-size: 0.78rem; color: rgba(255,255,255,.6); }
+.faceid-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
 .error-text {
   display: flex; align-items: center; justify-content: center;
   gap: 5px; color: var(--expense); font-size: 0.82rem; margin-top: 6px;

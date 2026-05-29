@@ -175,6 +175,88 @@ async function decryptLegacy(b64, password) {
   } catch { return null; }
 }
 
+// ── Biometric (Face ID / Touch ID) ────────────────────────────────
+async function isBiometricAvailable() {
+  try {
+    if (!window.PublicKeyCredential) return false;
+    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  } catch { return false; }
+}
+function getBiometricData() {
+  try { return JSON.parse(localStorage.getItem('vault_biometric') || 'null'); }
+  catch { return null; }
+}
+async function registerBiometric(password) {
+  try {
+    const userId = crypto.getRandomValues(new Uint8Array(16));
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        challenge, rp: { name: 'My Vault' },
+        user: { id: userId, name: 'vault', displayName: 'My Vault' },
+        pubKeyCredParams: [{ type:'public-key', alg:-7 }, { type:'public-key', alg:-257 }],
+        authenticatorSelection: { authenticatorAttachment:'platform', userVerification:'required' },
+        extensions: { prf: { eval: { first: new TextEncoder().encode('my-vault-v1') } } },
+        timeout: 60000
+      }
+    });
+    const prfOut = cred.getClientExtensionResults()?.prf?.results?.first;
+    let stored;
+    if (prfOut) {
+      const iv  = crypto.getRandomValues(new Uint8Array(12));
+      const km  = await crypto.subtle.importKey('raw', prfOut, 'HKDF', false, ['deriveKey']);
+      const key = await crypto.subtle.deriveKey(
+        { name:'HKDF', hash:'SHA-256', salt: new Uint8Array(32), info: new TextEncoder().encode('my-vault-bio') },
+        km, { name:'AES-GCM', length:256 }, false, ['encrypt']
+      );
+      const enc = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, key, new TextEncoder().encode(password));
+      const combined = new Uint8Array(12 + enc.byteLength);
+      combined.set(iv); combined.set(new Uint8Array(enc), 12);
+      stored = { credId: uint8ToBase64(new Uint8Array(cred.rawId)), enc: uint8ToBase64(combined), prf: true };
+    } else {
+      stored = { credId: uint8ToBase64(new Uint8Array(cred.rawId)), enc: btoa(encodeURIComponent(password)), prf: false };
+    }
+    localStorage.setItem('vault_biometric', JSON.stringify(stored));
+    return true;
+  } catch (err) { console.warn('Biometric register failed:', err.message); return false; }
+}
+async function authenticateWithBiometric() {
+  const data = getBiometricData();
+  if (!data) return null;
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const assertion = await navigator.credentials.get({
+      publicKey: {
+        challenge, rpId: location.hostname,
+        allowCredentials: [{ type:'public-key', id: base64ToUint8(data.credId) }],
+        userVerification: 'required',
+        extensions: data.prf ? { prf: { eval: { first: new TextEncoder().encode('my-vault-v1') } } } : {},
+        timeout: 60000
+      }
+    });
+    if (data.prf) {
+      const prfOut = assertion.getClientExtensionResults()?.prf?.results?.first;
+      if (!prfOut) throw new Error('PRF unavailable');
+      const km  = await crypto.subtle.importKey('raw', prfOut, 'HKDF', false, ['deriveKey']);
+      const key = await crypto.subtle.deriveKey(
+        { name:'HKDF', hash:'SHA-256', salt: new Uint8Array(32), info: new TextEncoder().encode('my-vault-bio') },
+        km, { name:'AES-GCM', length:256 }, false, ['decrypt']
+      );
+      const enc = base64ToUint8(data.enc);
+      const dec = await crypto.subtle.decrypt({ name:'AES-GCM', iv: enc.slice(0,12) }, key, enc.slice(12));
+      return new TextDecoder().decode(dec);
+    } else {
+      return decodeURIComponent(atob(data.enc));
+    }
+  } catch (err) { console.warn('Biometric auth failed:', err.message); return null; }
+}
+async function initBiometricUI() {
+  const hasData = !!getBiometricData();
+  const available = await isBiometricAvailable();
+  $('biometric-btn').classList.toggle('hidden', !(hasData && available));
+  $('disable-faceid-btn')?.classList.toggle('hidden', !hasData);
+}
+
 // ── Vault ──────────────────────────────────────────────────────────
 async function unlockVault() {
   const pwd = passwordInput.value;
@@ -191,10 +273,10 @@ async function unlockVault() {
     if (dec) {
       if (Array.isArray(dec)) { transactions = dec; budgets = {}; }
       else { transactions = dec.transactions || []; budgets = dec.budgets || {}; }
-      currentPassword = pwd; await saveData(); showApp();
+      currentPassword = pwd; await saveData(); showApp(false);
     } else vaultError.classList.remove('hidden');
   } else {
-    transactions = []; budgets = {}; currentPassword = pwd; await saveData(); showApp();
+    transactions = []; budgets = {}; currentPassword = pwd; await saveData(); showApp(false);
   }
   unlockText.textContent = 'Unlock Vault';
   unlockSpinner.classList.add('hidden');
@@ -212,12 +294,17 @@ function lockVault() {
   lucide.createIcons();
 }
 
-function showApp() {
+async function showApp(fromBiometric = false) {
   vaultScreen.classList.remove('active');
   appShell.classList.remove('hidden'); appShell.classList.add('visible');
   $('date').valueAsDate = new Date();
   showSection('dashboard');
   lucide.createIcons();
+  // Offer Face ID setup after first password unlock (not after biometric unlock)
+  if (!fromBiometric && !getBiometricData() && await isBiometricAvailable()) {
+    $('faceid-banner').classList.remove('hidden');
+  }
+  initBiometricUI();
 }
 
 // ── Navigation ─────────────────────────────────────────────────────
@@ -1011,6 +1098,47 @@ document.querySelector('.content-area').addEventListener('click', e => {
 // ── Global Events ──────────────────────────────────────────────────
 unlockBtn.addEventListener('click', unlockVault);
 passwordInput.addEventListener('keydown', e => e.key === 'Enter' && unlockVault());
+
+// Face ID unlock button
+$('biometric-btn').addEventListener('click', async () => {
+  $('biometric-btn').textContent = 'Scanning…';
+  const pwd = await authenticateWithBiometric();
+  if (!pwd) {
+    $('biometric-btn').innerHTML = `<svg class="faceid-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8V6a2 2 0 0 1 2-2h2M3 16v2a2 2 0 0 0 2 2h2M21 8V6a2 2 0 0 0-2-2h-2M21 16v2a2 2 0 0 1-2 2h-2"/><path d="M9 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM15 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/><path d="M9.5 16a4.5 4.5 0 0 0 5 0"/><line x1="12" y1="8" x2="12" y2="9"/></svg> Unlock with Face ID`;
+    showToast('Face ID failed. Use password.', 'warning'); return;
+  }
+  // Unlock with retrieved password
+  unlockText.textContent = 'Unlocking…'; unlockSpinner.classList.remove('hidden'); unlockBtn.disabled = true;
+  const stored = localStorage.getItem('vault_data');
+  if (stored) {
+    let dec = await decryptData(stored, pwd);
+    if (dec) {
+      if (Array.isArray(dec)) { transactions = dec; budgets = {}; }
+      else { transactions = dec.transactions || []; budgets = dec.budgets || {}; }
+      currentPassword = pwd; showApp(true);
+    } else { showToast('Face ID data mismatch. Use password.', 'warning'); }
+  }
+  unlockText.textContent = 'Unlock Vault'; unlockSpinner.classList.add('hidden'); unlockBtn.disabled = false;
+  $('biometric-btn').innerHTML = `<svg class="faceid-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8V6a2 2 0 0 1 2-2h2M3 16v2a2 2 0 0 0 2 2h2M21 8V6a2 2 0 0 0-2-2h-2M21 16v2a2 2 0 0 1-2 2h-2"/><path d="M9 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM15 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/><path d="M9.5 16a4.5 4.5 0 0 0 5 0"/><line x1="12" y1="8" x2="12" y2="9"/></svg> Unlock with Face ID`;
+});
+
+// Enable Face ID banner
+$('faceid-enable-btn').addEventListener('click', async () => {
+  $('faceid-banner').classList.add('hidden');
+  const ok = await registerBiometric(currentPassword);
+  if (ok) { showToast('Face ID enabled! 🔐'); initBiometricUI(); }
+  else showToast('Could not enable Face ID.', 'warning');
+});
+$('faceid-dismiss-btn').addEventListener('click', () => $('faceid-banner').classList.add('hidden'));
+
+// Disable Face ID
+$('disable-faceid-btn')?.addEventListener('click', () => {
+  localStorage.removeItem('vault_biometric');
+  $('disable-faceid-btn').classList.add('hidden');
+  $('biometric-btn').classList.add('hidden');
+  showToast('Face ID disabled.');
+  closeSidebar();
+});
 togglePwBtn.addEventListener('click', () => {
   const show = passwordInput.type === 'password';
   passwordInput.type = show ? 'text' : 'password';
@@ -1068,3 +1196,4 @@ function showToast(msg, type = 'success') {
 
 // ── Init ───────────────────────────────────────────────────────────
 lucide.createIcons();
+initBiometricUI();

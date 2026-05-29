@@ -77,7 +77,37 @@
         </button>
       </div>
       <p id="vault-error" class="error-text hidden"><i data-lucide="alert-circle"></i> Incorrect password.</p>
+
+      <!-- Face ID / biometric quick unlock -->
+      <button id="biometric-btn" class="btn biometric-btn hidden">
+        <svg class="faceid-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M3 8V6a2 2 0 0 1 2-2h2M3 16v2a2 2 0 0 0 2 2h2M21 8V6a2 2 0 0 0-2-2h-2M21 16v2a2 2 0 0 1-2 2h-2"/>
+          <path d="M9 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM15 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+          <path d="M9.5 16a4.5 4.5 0 0 0 5 0"/>
+          <line x1="12" y1="8" x2="12" y2="9"/>
+        </svg>
+        Unlock with Face ID
+      </button>
       <p class="vault-hint">New here? Enter any password to create your vault.</p>
+    </div>
+  </div>
+
+  <!-- Enable Face ID banner (shown after password unlock) -->
+  <div id="faceid-banner" class="faceid-banner hidden">
+    <div class="faceid-banner-inner">
+      <svg class="faceid-banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M3 8V6a2 2 0 0 1 2-2h2M3 16v2a2 2 0 0 0 2 2h2M21 8V6a2 2 0 0 0-2-2h-2M21 16v2a2 2 0 0 1-2 2h-2"/>
+        <path d="M9 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM15 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+        <path d="M9.5 16a4.5 4.5 0 0 0 5 0"/>
+      </svg>
+      <div class="faceid-banner-text">
+        <strong>Enable Face ID?</strong>
+        <span>Unlock instantly next time</span>
+      </div>
+      <div class="faceid-banner-actions">
+        <button id="faceid-enable-btn" class="btn primary small">Enable</button>
+        <button id="faceid-dismiss-btn" class="btn ghost small">Not now</button>
+      </div>
     </div>
   </div>
 
@@ -122,6 +152,9 @@
       <div class="sidebar-footer">
         <button class="nav-item" id="export-btn">
           <i data-lucide="file-down"></i><span>Export PDF</span>
+        </button>
+        <button class="nav-item hidden" id="disable-faceid-btn">
+          <i data-lucide="scan-face"></i><span>Disable Face ID</span>
         </button>
         <button class="nav-item nav-danger" id="lock-btn">
           <i data-lucide="log-out"></i><span>Lock Vault</span>
