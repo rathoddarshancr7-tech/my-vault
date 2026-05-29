@@ -261,6 +261,54 @@ button:not([disabled]), .mode-chip, .bill-card,
 .alert-banner i { width: 18px; height: 18px; color: #d97706; flex-shrink: 0; }
 .alert-banner span { flex: 1; }
 
+/* ── Today's Spend Widget ────────────────────────────────────────── */
+.today-widget {
+  background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 55%, #6366f1 100%);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 8px 32px rgba(99,102,241,.32);
+  margin-bottom: 16px;
+  position: relative; overflow: hidden;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.today-widget:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(99,102,241,.4); }
+.today-widget::before {
+  content: ''; position: absolute;
+  width: 160px; height: 160px; border-radius: 50%;
+  background: rgba(255,255,255,.07);
+  top: -55px; right: -24px; pointer-events: none;
+}
+.today-widget::after {
+  content: ''; position: absolute;
+  width: 100px; height: 100px; border-radius: 50%;
+  background: rgba(255,255,255,.04);
+  bottom: -35px; left: 40%; pointer-events: none;
+}
+.today-widget-left { display: flex; flex-direction: column; gap: 3px; }
+.today-widget-label {
+  font-size: 0.68rem; font-weight: 600;
+  color: rgba(255,255,255,.6);
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.today-widget-amount {
+  font-size: 2.2rem; font-weight: 800; color: #fff;
+  line-height: 1.1; letter-spacing: -.02em;
+}
+.today-widget-meta { font-size: 0.72rem; color: rgba(255,255,255,.5); margin-top: 3px; }
+.today-widget-right {
+  display: flex; flex-direction: column;
+  align-items: flex-end; gap: 10px; flex-shrink: 0;
+}
+.today-widget-date { font-size: 0.78rem; font-weight: 500; color: rgba(255,255,255,.65); white-space: nowrap; }
+.today-widget-icon {
+  width: 46px; height: 46px;
+  background: rgba(255,255,255,.15);
+  border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+}
+.today-widget-icon i { width: 22px; height: 22px; color: #fff; }
+
 /* ── Stat Cards ──────────────────────────────────────────────────── */
 .summary-grid {
   display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 20px;

@@ -274,6 +274,25 @@ function updateDashboard() {
   totalMonthEl.textContent   = `₹${monthExpense.toFixed(2)}`;
   totalCountEl.textContent   = count;
 
+  // ── Today's spend gadget ──────────────────────────────────────────
+  const todayStr  = now.toISOString().slice(0, 10);
+  let todaySpend = 0, todayCount = 0;
+  const todayCats = new Set();
+  for (const tx of transactions) {
+    if (tx.type === 'expense' && tx.date === todayStr) {
+      todaySpend += tx.amount;
+      todayCount++;
+      todayCats.add(tx.category);
+    }
+  }
+  $('today-amount').textContent = `₹${todaySpend.toFixed(2)}`;
+  $('today-meta').textContent   = todayCount === 0
+    ? 'No transactions today'
+    : `${todayCount} transaction${todayCount !== 1 ? 's' : ''} · ${todayCats.size} categor${todayCats.size !== 1 ? 'ies' : 'y'}`;
+  const dayName  = now.toLocaleDateString('en-IN', { weekday: 'short' });
+  const monthStr = now.toLocaleDateString('en-IN', { month: 'short' });
+  $('today-date').textContent = `${dayName}, ${now.getDate()} ${monthStr}`;
+
   // Recent 5
   const recent = [...transactions].sort((a,b) => new Date(b.date)-new Date(a.date)).slice(0,5);
   renderTxList(recentList, recent, false);
