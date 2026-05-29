@@ -251,9 +251,13 @@ async function authenticateWithBiometric() {
   } catch (err) { console.warn('Biometric auth failed:', err.message); return null; }
 }
 async function initBiometricUI() {
-  const hasData = !!getBiometricData();
+  const hasData   = !!getBiometricData();
   const available = await isBiometricAvailable();
+  // Vault screen unlock button — only shown when registered
   $('biometric-btn').classList.toggle('hidden', !(hasData && available));
+  // Sidebar: Enable button — shown when available but NOT yet registered
+  $('enable-faceid-sidebar-btn')?.classList.toggle('hidden', hasData || !available);
+  // Sidebar: Disable button — shown when registered
   $('disable-faceid-btn')?.classList.toggle('hidden', !hasData);
 }
 
@@ -1142,11 +1146,23 @@ $('faceid-enable-btn').addEventListener('click', async () => {
 });
 $('faceid-dismiss-btn').addEventListener('click', () => $('faceid-banner').classList.add('hidden'));
 
+// Enable Face ID (sidebar button)
+$('enable-faceid-sidebar-btn')?.addEventListener('click', async () => {
+  closeSidebar();
+  showToast('Follow the Face ID prompt…');
+  const ok = await registerBiometric(currentPassword);
+  if (ok) {
+    showToast('Face ID enabled! 🔐');
+    initBiometricUI();
+  } else {
+    showToast('Face ID setup failed. Make sure Face ID is set up in iPhone Settings → Face ID & Passcode.', 'warning');
+  }
+});
+
 // Disable Face ID
 $('disable-faceid-btn')?.addEventListener('click', () => {
   localStorage.removeItem('vault_biometric');
-  $('disable-faceid-btn').classList.add('hidden');
-  $('biometric-btn').classList.add('hidden');
+  initBiometricUI();
   showToast('Face ID disabled.');
   closeSidebar();
 });
