@@ -586,6 +586,162 @@ button:not([disabled]), .mode-chip, .bill-card,
 .modal-detail-row .value { font-weight: 700; color: var(--text-1); }
 .modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
 
+/* ── Analytics Section ───────────────────────────────────────────── */
+.atab-group {
+  display: flex; border-radius: var(--radius-xs);
+  border: 1.5px solid var(--border); overflow: hidden; flex-shrink: 0;
+}
+.atab {
+  padding: 6px 18px; font-size: 0.82rem; font-weight: 600;
+  border: none; background: transparent; color: var(--text-2);
+  font-family: 'Outfit', sans-serif;
+  transition: all var(--transition);
+}
+.atab.active { background: var(--grad-primary); color: #fff; }
+.analytics-pane { padding: 16px 20px 4px; }
+.analytics-stats {
+  display: grid; grid-template-columns: repeat(3,1fr);
+  gap: 1px; background: var(--border);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden; margin: 14px 0 20px;
+}
+.astat {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 14px; background: var(--surface-2);
+}
+.astat-label { font-size: 0.65rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .07em; }
+.astat-value { font-size: 0.92rem; font-weight: 800; color: var(--text-1); }
+
+/* ── Calendar Section ────────────────────────────────────────────── */
+.cal-card-header { justify-content: space-between; }
+.cal-card-header h3 { font-size: 1rem; }
+.cal-dow-row {
+  display: grid; grid-template-columns: repeat(7,1fr);
+  background: var(--surface-2); border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
+.cal-dow-row span {
+  text-align: center; padding: 8px 2px;
+  font-size: 0.66rem; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.cal-grid {
+  display: grid; grid-template-columns: repeat(7,1fr);
+}
+.cal-cell {
+  min-height: 68px; padding: 6px 5px;
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+  transition: background var(--transition); position: relative;
+}
+.cal-cell:nth-child(7n) { border-right: none; }
+.cal-cell.empty { background: var(--surface-2); opacity: 0.45; }
+.cal-cell:not(.empty) {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Ccircle cx='13' cy='13' r='12' fill='%236366f1'/%3E%3Ctext x='13' y='18' text-anchor='middle' fill='white' font-size='14' font-weight='bold' font-family='Arial,sans-serif'%3E%E2%82%B9%3C/text%3E%3C/svg%3E") 13 13, pointer;
+}
+.cal-cell:not(.empty):hover { background: var(--accent-light); }
+.cal-day-num {
+  font-size: 0.76rem; font-weight: 600; color: var(--text-2);
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px;
+}
+.cal-today .cal-day-num {
+  background: var(--grad-primary); color: #fff;
+  border-radius: 50%; font-weight: 800;
+}
+.cal-day-spend {
+  font-size: 0.62rem; font-weight: 700;
+  padding: 2px 4px; border-radius: 4px; white-space: nowrap;
+  align-self: flex-start;
+}
+/* Spend tiers */
+.cal-low  { background: #f0fdf4; }
+.cal-low  .cal-day-spend { background: #bbf7d0; color: #166534; }
+.cal-mid  { background: #fffbeb; }
+.cal-mid  .cal-day-spend { background: #fde68a; color: #92400e; }
+.cal-high { background: #fff1f2; }
+.cal-high .cal-day-spend { background: #fecdd3; color: #9f1239; }
+/* Day detail panel */
+.cal-day-detail { margin-top: 12px; overflow: hidden; }
+.cal-detail-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.cal-detail-header h4 { font-size: 0.9rem; font-weight: 700; color: var(--text-1); }
+
+/* ── Budget Planner ──────────────────────────────────────────────── */
+.budget-page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.budget-page-header h2 { font-size: 1.1rem; font-weight: 800; color: var(--text-1); }
+.budget-month-sub { font-size: 0.8rem; color: var(--text-3); margin-top: 2px; }
+.budget-edit-panel { margin-bottom: 16px; }
+.budget-edit-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr));
+  gap: 14px; padding: 16px 20px;
+}
+.budget-edit-row { display: flex; flex-direction: column; gap: 6px; }
+.budget-edit-label {
+  font-size: 0.82rem; font-weight: 600; color: var(--text-2);
+  display: flex; align-items: center; gap: 6px;
+}
+.budget-input {
+  width: 100%; padding: 9px 12px 9px 30px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-xs);
+  font-family: 'Outfit', sans-serif; font-size: 0.9rem; font-weight: 600;
+  color: var(--text-1); background: var(--surface);
+  transition: border-color var(--transition);
+  -webkit-appearance: none; appearance: none;
+}
+.budget-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+.budget-cards-wrap {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr));
+  gap: 14px; margin-bottom: 4px;
+}
+.budget-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.budget-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.budget-card-header {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; margin-bottom: 12px; gap: 8px;
+}
+.budget-cat-info { display: flex; align-items: center; gap: 10px; }
+.budget-cat-emoji { font-size: 1.6rem; }
+.budget-cat-name { font-size: 0.9rem; font-weight: 700; color: var(--text-1); }
+.budget-cat-sub { font-size: 0.72rem; color: var(--text-3); margin-top: 2px; }
+.budget-pct-badge {
+  font-size: 0.76rem; font-weight: 800;
+  padding: 4px 10px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+}
+.budget-bar-track {
+  height: 8px; background: var(--border);
+  border-radius: 4px; overflow: hidden; margin-bottom: 10px;
+}
+.budget-bar-fill {
+  height: 100%; border-radius: 4px;
+  transition: width .5s cubic-bezier(.4,0,.2,1);
+}
+.budget-card-footer {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.budget-status { font-size: 0.75rem; font-weight: 700; }
+.budget-remaining { font-size: 0.75rem; color: var(--text-3); font-weight: 500; }
+/* Badge + status color states */
+.b-ok   { background: #dcfce7; color: #15803d; }
+.b-warn { background: #fef9c3; color: #a16207; }
+.b-red  { background: #fee2e2; color: #b91c1c; }
+.b-over { background: #fecaca; color: #7f1d1d; }
+.budget-status.b-ok   { color: #15803d; }
+.budget-status.b-warn { color: #a16207; }
+.budget-status.b-red  { color: #b91c1c; }
+.budget-status.b-over { color: #7f1d1d; font-weight: 800; }
+
 /* ── Bottom Nav ──────────────────────────────────────────────────── */
 .bottom-nav { display: none; }
 
@@ -744,10 +900,29 @@ button:not([disabled]), .mode-chip, .bill-card,
   .mode-chip:active { transform: scale(0.95); }
 }
 
+  /* ── Analytics mobile ── */
+  .analytics-stats { grid-template-columns: repeat(3,1fr); }
+  .astat { padding: 10px 10px; }
+  .astat-value { font-size: 0.82rem; }
+
+  /* ── Calendar mobile ── */
+  .cal-cell { min-height: 48px; padding: 4px 3px; }
+  .cal-day-num { font-size: 0.7rem; width: 18px; height: 18px; }
+  .cal-day-spend { font-size: 0.58rem; padding: 1px 3px; }
+  .cal-dow-row span { font-size: 0.6rem; padding: 6px 1px; }
+
+  /* ── Budget mobile ── */
+  .budget-cards-wrap { grid-template-columns: 1fr; }
+  .budget-edit-grid { grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 14px; }
+}
+
 /* ── Tiny phones (≤360px) ── */
 @media (max-width: 360px) {
   .stat-card { min-width: 135px; }
   .stat-value { font-size: 1rem; }
   .bills-grid { grid-template-columns: 1fr; }
   .tx-note { max-width: 100px; }
+  .budget-edit-grid { grid-template-columns: 1fr; }
+  .analytics-stats { grid-template-columns: 1fr; }
+  .cal-cell { min-height: 40px; }
 }
