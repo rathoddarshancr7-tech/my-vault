@@ -1,4 +1,4 @@
-const CACHE = 'my-vault-v1';
+const CACHE = 'my-vault-v2';
 
 const APP_SHELL = [
   './',
