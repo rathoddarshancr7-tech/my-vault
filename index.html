@@ -29,6 +29,7 @@
     <div class="toast-inner">
       <i data-lucide="check-circle" class="toast-icon"></i>
       <span id="toast-message">Message</span>
+      <button id="toast-undo-btn" class="toast-undo-btn hidden">Undo</button>
     </div>
   </div>
 
@@ -150,12 +151,22 @@
       </nav>
 
       <div class="sidebar-footer">
+        <button class="nav-item" id="dark-mode-btn">
+          <i data-lucide="moon"></i><span>Dark Mode</span>
+        </button>
         <button class="nav-item" id="export-btn">
           <i data-lucide="file-down"></i><span>Export PDF</span>
         </button>
         <button class="nav-item" id="export-csv-btn">
           <i data-lucide="file-spreadsheet"></i><span>Export CSV</span>
         </button>
+        <button class="nav-item" id="backup-btn">
+          <i data-lucide="hard-drive-download"></i><span>Backup Vault</span>
+        </button>
+        <button class="nav-item" id="restore-btn">
+          <i data-lucide="hard-drive-upload"></i><span>Restore Vault</span>
+        </button>
+        <input type="file" id="restore-file-input" accept=".json" hidden>
         <button class="nav-item hidden" id="enable-faceid-sidebar-btn">
           <i data-lucide="scan-face"></i><span>Enable Face ID</span>
         </button>
@@ -190,6 +201,13 @@
             <i data-lucide="bell"></i>
             <span><strong>Heads up!</strong> No expenses logged in over 7 days.</span>
             <button id="dismiss-reminder-btn" class="btn ghost icon-btn"><i data-lucide="x"></i></button>
+          </div>
+
+          <!-- Recurring reminders -->
+          <div id="recurring-reminder" class="alert-banner recurring-banner hidden">
+            <i data-lucide="refresh-cw"></i>
+            <div id="recurring-list" style="flex:1;font-size:.85rem"></div>
+            <button id="dismiss-recurring-btn" class="btn ghost icon-btn"><i data-lucide="x"></i></button>
           </div>
 
           <!-- Today's Spend Gadget -->
@@ -234,6 +252,35 @@
                 <span id="forecast-amount" class="stat-value">₹0.00</span>
               </div>
             </div>
+            <div class="stat-card card-income">
+              <div class="stat-icon"><i data-lucide="arrow-down-circle"></i></div>
+              <div class="stat-body">
+                <span class="stat-label">Total Income</span>
+                <span id="total-income" class="stat-value">₹0.00</span>
+              </div>
+            </div>
+            <div class="stat-card card-savings">
+              <div class="stat-icon"><i data-lucide="piggy-bank"></i></div>
+              <div class="stat-body">
+                <span class="stat-label">Net Savings</span>
+                <span id="net-savings" class="stat-value">₹0.00</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Smart Insights -->
+          <div class="card insights-card hidden" id="insights-card">
+            <div class="card-header"><h3>💡 Smart Insights</h3></div>
+            <div id="insights-list" class="insights-list"></div>
+          </div>
+
+          <!-- Savings Goal -->
+          <div class="card savings-goal-card hidden" id="savings-goal-card">
+            <div class="card-header">
+              <h3>🎯 Savings Goal</h3>
+              <button class="btn ghost small" id="set-goal-btn"><i data-lucide="settings-2"></i> Set Goal</button>
+            </div>
+            <div id="savings-goal-body" class="savings-goal-body"></div>
           </div>
 
           <div class="dashboard-grid">
@@ -270,6 +317,16 @@
           <div class="card form-section">
             <h3 class="form-title" id="form-title-text">New Transaction</h3>
             <form id="transaction-form">
+
+              <!-- Type toggle -->
+              <div class="form-group">
+                <label>Transaction Type</label>
+                <div class="type-toggle" id="type-toggle">
+                  <button type="button" class="type-btn active" data-type="expense">💸 Expense</button>
+                  <button type="button" class="type-btn" data-type="income">💰 Income</button>
+                </div>
+                <input type="hidden" id="tx-type" value="expense">
+              </div>
 
               <div class="form-row">
                 <div class="form-group">
@@ -316,8 +373,8 @@
               </div>
 
               <div class="form-group hidden" id="payee-group">
-                <label for="payee">
-                  Paying to <span class="req-badge">Required for ₹5,000+</span>
+                <label for="payee" id="payee-label">
+                  Paying to <span id="payee-req-badge" class="req-badge">Required for ₹5,000+</span>
                 </label>
                 <input type="text" id="payee" placeholder="e.g. Amazon, Landlord, Swiggy..." maxlength="80">
               </div>
@@ -347,6 +404,14 @@
                 </div>
               </div>
 
+              <!-- Recurring -->
+              <div class="form-group recurring-row">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="tx-recurring">
+                  <span>🔁 Recurring monthly</span>
+                </label>
+              </div>
+
               <button type="submit" class="btn primary full-width" id="form-submit-btn">
                 <i data-lucide="plus" id="form-submit-icon"></i>
                 <span id="form-submit-label">Add Transaction</span>
@@ -362,7 +427,15 @@
         <section id="section-history" class="section">
           <div class="card">
             <div class="card-header stack-on-mobile">
-              <h3>Transaction History</h3>
+              <div style="display:flex;align-items:center;gap:10px">
+                <h3>Transaction History</h3>
+                <button class="btn outline small" id="bulk-select-btn">
+                  <i data-lucide="check-square"></i> Select
+                </button>
+                <button class="btn primary small hidden" id="bulk-delete-btn">
+                  <i data-lucide="trash-2"></i> Delete Selected
+                </button>
+              </div>
               <div class="list-controls">
                 <div class="search-box">
                   <i data-lucide="search" class="search-icon"></i>
@@ -415,6 +488,7 @@
               <div class="atab-group">
                 <button class="atab active" data-tab="weekly">Weekly</button>
                 <button class="atab" data-tab="monthly">Monthly</button>
+                <button class="atab" data-tab="payees">Payees</button>
               </div>
             </div>
             <div id="analytics-weekly" class="analytics-pane">
@@ -424,6 +498,9 @@
             <div id="analytics-monthly" class="analytics-pane hidden">
               <div class="chart-container" style="height:240px"><canvas id="monthlyChart"></canvas></div>
               <div id="monthly-stats" class="analytics-stats"></div>
+            </div>
+            <div id="analytics-payees" class="analytics-pane hidden">
+              <div id="payee-stats" class="top-cat-list" style="padding:16px 20px"></div>
             </div>
           </div>
         </section>

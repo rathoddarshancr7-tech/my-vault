@@ -13,6 +13,10 @@ let currentSection  = 'dashboard';
 let currentBill     = null; // { name, type, data }
 let editingId       = null; // id of tx being edited, or null
 let splitTxId       = null; // id of tx being split, or null
+let undoBuffer      = null; // { tx, timer } — pending delete
+let savingsGoal     = 0;    // monthly savings target (₹)
+let bulkMode        = false;
+let bulkSelected    = new Set();
 
 // ── DOM ────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -282,9 +286,10 @@ async function unlockVault() {
         // Old format — plain array. Migrate to new object format.
         transactions = dec; budgets = {}; migrated = true;
       } else if (dec && typeof dec === 'object') {
-        // New format — { transactions, budgets }
+        // New format — { transactions, budgets, savingsGoal }
         transactions = Array.isArray(dec.transactions) ? dec.transactions : [];
         budgets      = (dec.budgets && typeof dec.budgets === 'object') ? dec.budgets : {};
+        savingsGoal  = typeof dec.savingsGoal === 'number' ? dec.savingsGoal : 0;
       }
       currentPassword = pwd;
       // Only write back if we migrated format — never overwrite with empty
@@ -301,10 +306,13 @@ async function unlockVault() {
 }
 async function saveData() {
   if (!currentPassword) return;
-  localStorage.setItem('vault_data', await encryptData({ transactions, budgets }, currentPassword));
+  localStorage.setItem('vault_data', await encryptData({ transactions, budgets, savingsGoal }, currentPassword));
 }
 function lockVault() {
-  transactions = []; budgets = {}; currentPassword = ''; passwordInput.value = '';
+  transactions = []; budgets = {}; savingsGoal = 0;
+  if (undoBuffer) { clearTimeout(undoBuffer.timer); undoBuffer = null; }
+  bulkMode = false; bulkSelected.clear();
+  currentPassword = ''; passwordInput.value = '';
   vaultError.classList.add('hidden');
   appShell.classList.remove('visible'); appShell.classList.add('hidden');
   vaultScreen.classList.remove('screen'); vaultScreen.classList.add('screen','active');
@@ -377,23 +385,32 @@ function escapeHtml(str) {
 }
 
 function updateDashboard() {
-  let expense = 0, monthExpense = 0;
+  let expense = 0, monthExpense = 0, totalIncome = 0;
   const catTotals = {};
   const now = new Date();
   const curMonth = now.getMonth(), curYear = now.getFullYear();
 
   for (const tx of transactions) {
+    const [y,m] = tx.date.split('-').map(Number);
     if (tx.type === 'expense') {
       expense += tx.amount;
       catTotals[tx.category] = (catTotals[tx.category] || 0) + tx.amount;
-      const [y,m] = tx.date.split('-').map(Number);
       if (m - 1 === curMonth && y === curYear) monthExpense += tx.amount;
+    } else if (tx.type === 'income') {
+      totalIncome += tx.amount;
     }
   }
-  const count = transactions.filter(t => t.type === 'expense').length;
+  const count = transactions.length;
   totalExpenseEl.textContent = `₹${expense.toFixed(2)}`;
   totalMonthEl.textContent   = `₹${monthExpense.toFixed(2)}`;
   totalCountEl.textContent   = count;
+
+  // ── Income + Net Savings ──────────────────────────────────────────
+  const net = totalIncome - expense;
+  $('total-income').textContent = `₹${totalIncome.toFixed(2)}`;
+  const netEl = $('net-savings');
+  netEl.textContent = `${net >= 0 ? '' : '-'}₹${Math.abs(net).toFixed(2)}`;
+  netEl.style.color = net >= 0 ? '#fff' : '#fca5a5';
 
   // ── Month forecast ────────────────────────────────────────────────
   const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
@@ -432,6 +449,9 @@ function updateDashboard() {
 
   // Reminder
   checkWeeklyReminder();
+  renderInsights();
+  renderSavingsGoal();
+  renderRecurringReminder();
 
   lucide.createIcons();
 }
@@ -500,8 +520,11 @@ function createTxItem(tx, showDelete = true) {
   const div = document.createElement('div');
   div.className = 'transaction-item';
   div.dataset.id = tx.id;
+  const checked = bulkSelected.has(tx.id);
   div.innerHTML = `
     <div class="tx-left">
+      ${bulkMode && showDelete ? `<input type="checkbox" class="bulk-checkbox" data-id="${tx.id}" ${checked?'checked':''}
+         style="margin-right:8px;width:18px;height:18px;accent-color:var(--accent);flex-shrink:0">` : ''}
       <div class="tx-emoji" style="background:${color}18;color:${color}">${emoji}</div>
       <div class="tx-info">
         <span class="tx-cat">${escapeHtml(label)}</span>
@@ -509,6 +532,7 @@ function createTxItem(tx, showDelete = true) {
           ${tx.payee  ? `<span class="tx-payee">→ ${escapeHtml(tx.payee)}</span>` : ''}
           ${tx.note   ? `<span class="tx-note">${escapeHtml(tx.note)}</span>` : ''}
           ${modeBadgeHtml(tx.paymentMode)}
+          ${tx.recurring ? `<span class="mode-badge" style="color:#8b5cf6;background:#f5f3ff">🔁</span>` : ''}
         </div>
         <span class="tx-date">${formatDate(tx.date)}</span>
       </div>
@@ -516,7 +540,7 @@ function createTxItem(tx, showDelete = true) {
     <div class="tx-right">
       <span class="tx-amount ${tx.type}">${sign}₹${tx.amount.toFixed(2)}</span>
       ${tx.bill ? `<span class="bill-clip" data-id="${tx.id}" title="View receipt"><i data-lucide="paperclip"></i></span>` : ''}
-      ${showDelete ? `
+      ${showDelete && !bulkMode ? `
         <button class="tx-edit-btn" data-id="${tx.id}" title="Edit"><i data-lucide="pencil"></i></button>
         <button class="tx-split-btn" data-id="${tx.id}" title="Split"><i data-lucide="scissors"></i></button>
         <button class="tx-delete-btn" data-id="${tx.id}" title="Delete"><i data-lucide="trash-2"></i></button>
@@ -798,11 +822,27 @@ function startEditTx(id) {
   $('form-submit-icon').setAttribute('data-lucide', 'check');
   $('cancel-edit-btn').classList.remove('hidden');
 
+  // type toggle
+  const txType = tx.type || 'expense';
+  $('tx-type').value = txType;
+  $('type-toggle').querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  $('type-toggle').querySelector(`[data-type="${txType}"]`)?.classList.add('active');
+  if (txType === 'income') {
+    categoryGroup.classList.add('hidden'); categorySelect.required = false;
+    payeeGroup.classList.remove('hidden'); payeeInput.required = false;
+    $('payee-label').childNodes[0].textContent = 'Income Source ';
+    $('payee-req-badge').classList.add('hidden');
+    payeeInput.placeholder = 'e.g. Salary, Freelance...';
+  } else {
+    categoryGroup.classList.remove('hidden'); categorySelect.required = true;
+  }
+
   $('amount').value      = tx.amount;
   $('date').value        = tx.date;
   categorySelect.value   = tx.category || 'Food';
   $('note').value        = tx.note  || '';
   payeeInput.value       = tx.payee || '';
+  $('tx-recurring').checked = !!tx.recurring;
 
   // payment mode chip
   const mode = tx.paymentMode || 'cash';
@@ -938,6 +978,263 @@ function closeSplitModal() {
   splitTxId = null;
 }
 
+// ── Dark Mode ──────────────────────────────────────────────────────
+function initDarkMode() {
+  const saved = localStorage.getItem('vault_theme') || 'light';
+  applyTheme(saved, false);
+}
+function applyTheme(theme, save = true) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = $('dark-mode-btn');
+  if (btn) {
+    btn.querySelector('i').setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
+    btn.querySelector('span').textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+  }
+  if (save) localStorage.setItem('vault_theme', theme);
+  lucide.createIcons();
+}
+function toggleDarkMode() {
+  const cur = document.documentElement.getAttribute('data-theme') || 'light';
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
+  closeSidebar();
+}
+
+// ── Backup / Restore ───────────────────────────────────────────────
+async function exportBackup() {
+  if (!currentPassword) return;
+  const enc  = await encryptData({ transactions, budgets, savingsGoal }, currentPassword);
+  const blob = new Blob([JSON.stringify({ v: 1, enc })], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `my-vault-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Backup downloaded!');
+  closeSidebar();
+}
+async function importBackup(file) {
+  try {
+    const text = await file.text();
+    const obj  = JSON.parse(text);
+    const dec  = await decryptData(obj.enc, currentPassword);
+    if (!dec) { showToast('Wrong password or corrupt backup.', 'warning'); return; }
+    if (Array.isArray(dec)) {
+      transactions = dec; budgets = {}; savingsGoal = 0;
+    } else if (typeof dec === 'object') {
+      transactions = Array.isArray(dec.transactions) ? dec.transactions : [];
+      budgets      = (dec.budgets && typeof dec.budgets === 'object') ? dec.budgets : {};
+      savingsGoal  = typeof dec.savingsGoal === 'number' ? dec.savingsGoal : 0;
+    }
+    await saveData();
+    updateDashboard();
+    showToast(`✅ Restored ${transactions.length} transactions!`);
+  } catch { showToast('Failed to import backup.', 'warning'); }
+}
+
+// ── Undo Delete ────────────────────────────────────────────────────
+function showUndoToast(msg = 'Deleted') {
+  clearTimeout(toastTimer);
+  toastMsg.textContent = msg;
+  $('toast-undo-btn').classList.remove('hidden');
+  toastEl.className = 'toast show';
+  toastTimer = setTimeout(() => {
+    toastEl.classList.remove('show');
+    $('toast-undo-btn').classList.add('hidden');
+    if (undoBuffer) { undoBuffer = null; saveData(); }
+  }, 5000);
+}
+function handleDeleteWithUndo(id) {
+  const tx = transactions.find(t => t.id === id);
+  if (!tx) return;
+  // Finalize any pending undo
+  if (undoBuffer) { clearTimeout(undoBuffer.timer); saveData(); undoBuffer = null; }
+  transactions = transactions.filter(t => t.id !== id);
+  updateDashboard();
+  if (currentSection === 'history') renderHistory();
+  if (currentSection === 'bills')   renderBills();
+  const timer = setTimeout(() => { undoBuffer = null; saveData(); }, 5000);
+  undoBuffer = { tx, timer };
+  showUndoToast('Deleted');
+}
+function undoDelete() {
+  if (!undoBuffer) return;
+  clearTimeout(undoBuffer.timer);
+  transactions.push(undoBuffer.tx);
+  transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+  undoBuffer = null;
+  updateDashboard();
+  if (currentSection === 'history') renderHistory();
+  if (currentSection === 'bills')   renderBills();
+  clearTimeout(toastTimer);
+  toastEl.classList.remove('show');
+  $('toast-undo-btn').classList.add('hidden');
+  showToast('↩️ Undo! Transaction restored.');
+}
+
+// ── Smart Insights ─────────────────────────────────────────────────
+function computeInsights() {
+  const now = new Date();
+  const curM = now.getMonth(), curY = now.getFullYear();
+  const prevM = curM === 0 ? 11 : curM - 1;
+  const prevY = curM === 0 ? curY - 1 : curY;
+  const inMonth = (t, y, m) => { const [ty,tm] = t.date.split('-').map(Number); return ty===y && tm-1===m; };
+  const curExp  = transactions.filter(t => t.type==='expense' && inMonth(t, curY, curM));
+  const prevExp = transactions.filter(t => t.type==='expense' && inMonth(t, prevY, prevM));
+  const insights = [];
+
+  // Category trend
+  const curCats={}, prevCats={};
+  for (const t of curExp)  curCats[t.category]  = (curCats[t.category]||0)  + t.amount;
+  for (const t of prevExp) prevCats[t.category] = (prevCats[t.category]||0) + t.amount;
+  let bigCat=null, bigPct=0;
+  for (const [cat, amt] of Object.entries(curCats)) {
+    const prev = prevCats[cat] || 0;
+    if (prev > 0) { const pct=((amt-prev)/prev*100); if (Math.abs(pct)>Math.abs(bigPct)){bigPct=pct;bigCat={cat,amt,pct};} }
+  }
+  if (bigCat) {
+    const dir = bigCat.pct>0?'up':'down'; const icon=bigCat.pct>0?'📈':'📉';
+    insights.push(`${icon} ${bigCat.cat} spend ${dir} ${Math.abs(bigCat.pct).toFixed(0)}% vs last month.`);
+  }
+
+  // Day of week with most spending
+  const dayTotals = Array(7).fill(0);
+  for (const t of transactions.filter(x=>x.type==='expense')) {
+    dayTotals[new Date(t.date+'T00:00:00').getDay()] += t.amount;
+  }
+  const maxDay = dayTotals.indexOf(Math.max(...dayTotals));
+  if (Math.max(...dayTotals)>0) {
+    insights.push(`📅 You spend most on ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][maxDay]}s.`);
+  }
+
+  // Biggest expense this month
+  const bigTx = curExp.reduce((a,b)=>b.amount>(a?.amount||0)?b:a, null);
+  if (bigTx) insights.push(`💸 Biggest this month: ₹${bigTx.amount.toFixed(0)} on ${bigTx.category}.`);
+
+  // Savings rate if income tracked
+  const curInc = transactions.filter(t=>t.type==='income'&&inMonth(t,curY,curM)).reduce((s,t)=>s+t.amount,0);
+  const curSpend = curExp.reduce((s,t)=>s+t.amount,0);
+  if (curInc>0) {
+    const rate=((curInc-curSpend)/curInc*100);
+    insights.push(`${rate>=20?'🎉':rate>=0?'👍':'⚠️'} Savings rate this month: ${rate.toFixed(0)}%.`);
+  }
+  return insights.slice(0,3);
+}
+function renderInsights() {
+  const card=$('insights-card'), list=$('insights-list');
+  if (!card||!list) return;
+  const ins=computeInsights();
+  if (!ins.length) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  list.innerHTML = ins.map(i=>`<div class="insight-item">${escapeHtml(i)}</div>`).join('');
+}
+
+// ── Savings Goal ───────────────────────────────────────────────────
+function renderSavingsGoal() {
+  const card=$('savings-goal-card'), body=$('savings-goal-body');
+  if (!card||!body) return;
+  const now=new Date(); const curM=now.getMonth(), curY=now.getFullYear();
+  const inMonth=(t,y,m)=>{const[ty,tm]=t.date.split('-').map(Number);return ty===y&&tm-1===m;};
+  const curInc = transactions.filter(t=>t.type==='income'&&inMonth(t,curY,curM)).reduce((s,t)=>s+t.amount,0);
+  const curSpend = transactions.filter(t=>t.type==='expense'&&inMonth(t,curY,curM)).reduce((s,t)=>s+t.amount,0);
+  const net = curInc - curSpend;
+  if (curInc===0 && savingsGoal===0) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  if (savingsGoal<=0) {
+    body.innerHTML=`<div class="savings-no-goal"><span>Net this month:</span><strong style="color:${net>=0?'#10b981':'#ef4444'}">₹${net.toFixed(0)}</strong></div>`;
+    return;
+  }
+  const pct=Math.min((net/savingsGoal)*100,100);
+  const color=pct>=100?'#10b981':pct>=50?'#f59e0b':'#ef4444';
+  body.innerHTML=`
+    <div class="savings-goal-nums">
+      <span>Saved: <strong>₹${Math.max(net,0).toFixed(0)}</strong></span>
+      <span>Goal: <strong>₹${savingsGoal.toFixed(0)}</strong></span>
+    </div>
+    <div class="budget-bar-track" style="margin:8px 0">
+      <div class="budget-bar-fill" style="width:${Math.max(0,pct).toFixed(1)}%;background:${color}"></div>
+    </div>
+    <div class="savings-goal-status">${pct>=100?'🎉 Goal reached!':net<0?'⚠️ Spending > income':pct.toFixed(0)+'% of goal'}</div>`;
+}
+async function setSavingsGoal() {
+  const val = prompt('Monthly savings goal (₹):', savingsGoal || '');
+  if (val === null) return;
+  savingsGoal = parseFloat(val) || 0;
+  await saveData();
+  renderSavingsGoal();
+  showToast('Savings goal saved!');
+}
+
+// ── Recurring Reminders ────────────────────────────────────────────
+function renderRecurringReminder() {
+  const banner=$('recurring-reminder'), list=$('recurring-list');
+  if (!banner||!list) return;
+  const now=new Date(); const curM=now.getMonth(), curY=now.getFullYear();
+  const prevM=curM===0?11:curM-1; const prevY=curM===0?curY-1:curY;
+  const inMonth=(t,y,m)=>{const[ty,tm]=t.date.split('-').map(Number);return ty===y&&tm-1===m;};
+  const lastMonRec = transactions.filter(t=>t.recurring&&inMonth(t,prevY,prevM));
+  const thisMonCats = new Set(transactions.filter(t=>inMonth(t,curY,curM)).map(t=>t.category+'|'+t.type));
+  const due = lastMonRec.filter(t=>!thisMonCats.has(t.category+'|'+t.type));
+  if (!due.length) { banner.classList.add('hidden'); return; }
+  banner.classList.remove('hidden');
+  list.innerHTML = `<strong>${due.length} recurring due:</strong> ${due.map(t=>`${CATEGORY_EMOJI[t.category]||'📦'} ${t.category} (₹${t.amount.toFixed(0)})`).join(', ')}`;
+}
+
+// ── Payee Analytics ────────────────────────────────────────────────
+function renderPayeeChart() {
+  const el=$('payee-stats');
+  if (!el) return;
+  const map={};
+  for (const tx of transactions) {
+    if (tx.type==='expense'&&tx.payee) map[tx.payee]=(map[tx.payee]||0)+tx.amount;
+  }
+  const sorted=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  if (!sorted.length) {
+    el.innerHTML='<p class="empty-small">No payee data yet.<br>Add transactions with payee/merchant names.</p>'; return;
+  }
+  const max=sorted[0][1];
+  el.innerHTML=sorted.map(([payee,amt])=>`
+    <div class="top-cat-item">
+      <div class="top-cat-row">
+        <span class="top-cat-name">👤 ${escapeHtml(payee)}</span>
+        <span class="top-cat-amt">₹${amt.toFixed(0)}</span>
+      </div>
+      <div class="top-cat-bar">
+        <div class="top-cat-fill" style="width:${(amt/max*100).toFixed(1)}%;background:var(--accent)"></div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Bulk Delete ────────────────────────────────────────────────────
+function toggleBulkMode() {
+  bulkMode = !bulkMode;
+  bulkSelected.clear();
+  const btn=$('bulk-select-btn'), delBtn=$('bulk-delete-btn');
+  if (bulkMode) {
+    btn.innerHTML='<i data-lucide="x"></i> Cancel';
+    delBtn.classList.remove('hidden');
+  } else {
+    btn.innerHTML='<i data-lucide="check-square"></i> Select';
+    delBtn.classList.add('hidden');
+  }
+  renderHistory();
+  lucide.createIcons();
+}
+async function bulkDeleteSelected() {
+  const count=bulkSelected.size;
+  if (!count) { showToast('Nothing selected.', 'warning'); return; }
+  transactions=transactions.filter(t=>!bulkSelected.has(t.id));
+  await saveData();
+  bulkSelected.clear();
+  bulkMode=false;
+  $('bulk-delete-btn').classList.add('hidden');
+  $('bulk-select-btn').innerHTML='<i data-lucide="check-square"></i> Select';
+  updateDashboard();
+  renderHistory();
+  showToast(`🗑️ ${count} transaction${count>1?'s':''} deleted.`);
+  lucide.createIcons();
+}
+
 // ── Analytics ──────────────────────────────────────────────────────
 const BUDGET_CATEGORIES = [
   { key:'Food',          emoji:'🍔', color:'#f59e0b' },
@@ -1047,8 +1344,10 @@ document.addEventListener('click', e => {
   const which = tab.dataset.tab;
   $('analytics-weekly').classList.toggle('hidden', which !== 'weekly');
   $('analytics-monthly').classList.toggle('hidden', which !== 'monthly');
+  $('analytics-payees').classList.toggle('hidden', which !== 'payees');
   if (which === 'weekly') renderWeeklyChart();
-  else renderMonthlyChart();
+  else if (which === 'monthly') renderMonthlyChart();
+  else if (which === 'payees') renderPayeeChart();
 });
 
 // ── Calendar ───────────────────────────────────────────────────────
@@ -1214,8 +1513,38 @@ async function saveBudgets() {
 
 // ── Form Events ────────────────────────────────────────────────────
 
+// Type toggle
+$('type-toggle').addEventListener('click', e => {
+  const btn = e.target.closest('.type-btn');
+  if (!btn) return;
+  const type = btn.dataset.type;
+  $('type-toggle').querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  $('tx-type').value = type;
+  if (type === 'income') {
+    categoryGroup.classList.add('hidden');
+    categorySelect.required = false;
+    // Always show source field for income
+    payeeGroup.classList.remove('hidden');
+    payeeInput.required = false;
+    $('payee-label').childNodes[0].textContent = 'Income Source ';
+    $('payee-req-badge').classList.add('hidden');
+    payeeInput.placeholder = 'e.g. Salary, Freelance, Rent received...';
+  } else {
+    categoryGroup.classList.remove('hidden');
+    categorySelect.required = true;
+    payeeGroup.classList.add('hidden');
+    payeeInput.required = false;
+    $('payee-label').childNodes[0].textContent = 'Paying to ';
+    $('payee-req-badge').classList.remove('hidden');
+    payeeInput.placeholder = 'e.g. Amazon, Landlord, Swiggy...';
+    checkPayeeRequired();
+  }
+});
+
 // Payee: required when amount > 5000
 function checkPayeeRequired() {
+  if ($('tx-type').value === 'income') return;
   const amt = parseFloat($('amount').value) || 0;
   const show = amt > 5000;
   payeeGroup.classList.toggle('hidden', !show);
@@ -1249,13 +1578,14 @@ removeBillBtn.addEventListener('click', () => {
 // Submit
 transactionForm.addEventListener('submit', async e => {
   e.preventDefault();
-  const type     = 'expense';
-  const amount   = parseFloat($('amount').value);
-  const date     = $('date').value;
-  const category = type === 'expense' ? categorySelect.value : null;
-  const note     = $('note').value.trim();
-  const payee    = payeeInput.value.trim();
-  const mode     = paymentModeHidden.value;
+  const type      = $('tx-type').value;
+  const amount    = parseFloat($('amount').value);
+  const date      = $('date').value;
+  const category  = type === 'expense' ? categorySelect.value : null;
+  const note      = $('note').value.trim();
+  const payee     = payeeInput.value.trim();
+  const mode      = paymentModeHidden.value;
+  const recurring = $('tx-recurring').checked;
 
   if (!amount || amount <= 0 || !date) return;
   if (amount > 5000 && !payee) { payeeInput.focus(); showToast('Please enter who you are paying.', 'warning'); return; }
@@ -1268,6 +1598,7 @@ transactionForm.addEventListener('submit', async e => {
       if (note)        transactions[idx].note  = note;  else delete transactions[idx].note;
       if (payee)       transactions[idx].payee = payee; else delete transactions[idx].payee;
       if (currentBill) transactions[idx].bill  = currentBill; else delete transactions[idx].bill;
+      if (recurring)   transactions[idx].recurring = true; else delete transactions[idx].recurring;
     }
     editingId = null;
     resetFormToAdd();
@@ -1279,9 +1610,10 @@ transactionForm.addEventListener('submit', async e => {
   } else {
     // ── Add new transaction ──────────────────────────────────────
     const tx = { id: crypto.randomUUID(), type, amount, date, category, paymentMode: mode };
-    if (note)  tx.note  = note;
-    if (payee) tx.payee = payee;
-    if (currentBill) tx.bill = currentBill;
+    if (note)      tx.note      = note;
+    if (payee)     tx.payee     = payee;
+    if (currentBill) tx.bill    = currentBill;
+    if (recurring) tx.recurring = true;
     transactions.push(tx);
     await saveData();
     updateDashboard();
@@ -1293,31 +1625,48 @@ transactionForm.addEventListener('submit', async e => {
   // Reset form
   transactionForm.reset();
   $('date').valueAsDate = new Date();
+  // Reset type toggle to expense
+  $('tx-type').value = 'expense';
+  $('type-toggle').querySelectorAll('.type-btn').forEach(b=>b.classList.remove('active'));
+  $('type-toggle').querySelector('[data-type="expense"]').classList.add('active');
+  categoryGroup.classList.remove('hidden');
+  categorySelect.required = true;
+  // Reset payee
   payeeGroup.classList.add('hidden');
   payeeInput.required = false;
+  $('payee-label').childNodes[0].textContent = 'Paying to ';
+  $('payee-req-badge').classList.remove('hidden');
+  payeeInput.placeholder = 'e.g. Amazon, Landlord, Swiggy...';
+  // Reset payment mode
   paymentModes.querySelectorAll('.mode-chip').forEach(c => c.classList.remove('active'));
   paymentModes.querySelector('[data-mode="cash"]').classList.add('active');
   paymentModeHidden.value = 'cash';
+  // Reset bill + recurring
   currentBill = null; billFileInput.value = '';
   billPreview.classList.add('hidden'); uploadZone.classList.remove('hidden');
+  $('tx-recurring').checked = false;
   lucide.createIcons();
 });
 
-// Delete (event delegation on both lists)
-function handleDeleteClick(e) {
-  const btn = e.target.closest('.tx-delete-btn');
-  if (!btn) return;
-  (async () => {
-    transactions = transactions.filter(t => t.id !== btn.dataset.id);
-    await saveData();
-    updateDashboard();
-    if (currentSection === 'history') renderHistory();
-    if (currentSection === 'bills')   renderBills();
-    showToast('Transaction deleted.');
-  })();
+// Delete / bulk-checkbox delegation
+function handleListClick(e) {
+  const delBtn = e.target.closest('.tx-delete-btn');
+  if (delBtn) { handleDeleteWithUndo(delBtn.dataset.id); return; }
+  const cb = e.target.closest('.bulk-checkbox');
+  if (cb) {
+    const id = cb.dataset.id;
+    if (cb.checked) bulkSelected.add(id); else bulkSelected.delete(id);
+    // Update delete button label
+    const delBtnBulk = $('bulk-delete-btn');
+    if (delBtnBulk) delBtnBulk.innerHTML = `<i data-lucide="trash-2"></i> Delete (${bulkSelected.size})`;
+    lucide.createIcons();
+  }
 }
-historyList.addEventListener('click', handleDeleteClick);
-recentList.addEventListener('click', handleDeleteClick);
+historyList.addEventListener('click', handleListClick);
+recentList.addEventListener('click', e => {
+  const delBtn = e.target.closest('.tx-delete-btn');
+  if (delBtn) handleDeleteWithUndo(delBtn.dataset.id);
+});
 
 // Bill clip click + edit + split (delegation on content area)
 document.querySelector('.content-area').addEventListener('click', e => {
@@ -1401,6 +1750,15 @@ togglePwBtn.addEventListener('click', () => {
 lockBtn.addEventListener('click', lockVault);
 exportBtn.addEventListener('click', exportPDF);
 $('export-csv-btn')?.addEventListener('click', () => { closeSidebar(); exportCSV(); });
+$('dark-mode-btn')?.addEventListener('click', toggleDarkMode);
+$('backup-btn')?.addEventListener('click', exportBackup);
+$('restore-btn')?.addEventListener('click', () => { closeSidebar(); $('restore-file-input').click(); });
+$('restore-file-input')?.addEventListener('change', e => { const f=e.target.files[0]; if(f) importBackup(f); e.target.value=''; });
+$('toast-undo-btn')?.addEventListener('click', undoDelete);
+$('set-goal-btn')?.addEventListener('click', setSavingsGoal);
+$('bulk-select-btn')?.addEventListener('click', toggleBulkMode);
+$('bulk-delete-btn')?.addEventListener('click', bulkDeleteSelected);
+$('dismiss-recurring-btn')?.addEventListener('click', () => $('recurring-reminder').classList.add('hidden'));
 menuBtn.addEventListener('click', openSidebar);
 sidebarOverlay.addEventListener('click', closeSidebar);
 sidebarCloseBtn.addEventListener('click', closeSidebar);
@@ -1477,3 +1835,4 @@ function showToast(msg, type = 'success') {
 // ── Init ───────────────────────────────────────────────────────────
 lucide.createIcons();
 initBiometricUI();
+initDarkMode();
