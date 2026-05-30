@@ -569,108 +569,96 @@
           </div>
         </section>
 
-        <!-- ── MONEY BOWL ─────────────────────────── -->
+        <!-- ── MONEY BOWL (Luxury Vault Jar) ──────── -->
         <section id="section-moneybowl" class="section">
-          <div class="moneybowl-page">
+          <div class="luxjar-page">
 
-            <!-- Period filter -->
-            <div class="bowl-filter-row">
+            <!-- Period toggle -->
+            <div class="luxjar-period-row">
               <button class="bowl-filter-btn active" data-period="month">This Month</button>
               <button class="bowl-filter-btn" data-period="all">All Time</button>
             </div>
 
-            <!-- Scene: side labels + bowl -->
-            <div class="bowl-scene-wrap">
+            <!-- Jar scene -->
+            <div class="luxjar-scene">
+              <div class="luxjar-ambient-glow"></div>
 
-              <!-- Left: Income label -->
-              <div class="bowl-side-label">
-                <span class="bowl-side-val" id="bowl-income-label">₹0</span>
-                <span class="bowl-side-key">💰 Income</span>
-              </div>
+              <div class="luxjar-outer">
 
-              <!-- The glass bowl -->
-              <div class="bowl-outer-wrap">
-                <!-- Rim top -->
-                <div class="bowl-rim-wrap">
-                  <div class="bowl-rim-top"></div>
+                <!-- Cap / lid -->
+                <div class="luxjar-cap-area">
+                  <div class="luxjar-cap"></div>
+                  <div class="luxjar-neck"></div>
                 </div>
 
                 <!-- Glass body -->
-                <div class="bowl-glass">
-                  <!-- Glass shine streaks -->
-                  <div class="bowl-glare-left"></div>
-                  <div class="bowl-glare-right"></div>
+                <div class="luxjar-body">
 
-                  <!-- Liquid with waves + bubbles -->
-                  <div class="bowl-liquid" id="bowl-liquid" style="height:0%">
-                    <div class="bowl-wave-1"></div>
-                    <div class="bowl-wave-2"></div>
-                    <div class="bubble b1"></div>
-                    <div class="bubble b2"></div>
-                    <div class="bubble b3"></div>
-                    <div class="bubble b4"></div>
+                  <!-- Liquid -->
+                  <div class="luxjar-liquid" id="bowl-liquid" style="height:0%">
+                    <div class="liq-wave-1"></div>
+                    <div class="liq-wave-2"></div>
+                    <div class="liq-glow"></div>
+                    <div class="liq-particle lp1"></div>
+                    <div class="liq-particle lp2"></div>
+                    <div class="liq-particle lp3"></div>
+                    <div class="liq-particle lp4"></div>
+                    <div class="liq-particle lp5"></div>
                   </div>
 
-                  <!-- Level tick marks -->
-                  <div class="bowl-tick t75"><span>75%</span></div>
-                  <div class="bowl-tick t50"><span>50%</span></div>
-                  <div class="bowl-tick t25"><span>25%</span></div>
+                  <!-- Glass reflections (above liquid) -->
+                  <div class="luxjar-glare-streak"></div>
+                  <div class="luxjar-glare-mini"></div>
+                  <div class="luxjar-glare-orb"></div>
 
-                  <!-- Centre text overlay -->
-                  <div class="bowl-center-text">
-                    <span class="bowl-pct-val" id="bowl-pct-val">—</span>
-                    <span class="bowl-pct-sub" id="bowl-pct-sub">remaining</span>
+                  <!-- Tick marks -->
+                  <div class="luxjar-tick t75" data-label="75%"></div>
+                  <div class="luxjar-tick t50" data-label="50%"></div>
+                  <div class="luxjar-tick t25" data-label="25%"></div>
+
+                  <!-- Centre text -->
+                  <div class="luxjar-center-text">
+                    <div class="luxjar-main-val" id="bowl-pct-val">—</div>
+                    <div class="luxjar-sub-txt" id="bowl-pct-sub">remaining</div>
                   </div>
-                </div>
 
-                <!-- Rim bottom / base -->
-                <div class="bowl-base"></div>
-              </div>
+                </div><!-- /luxjar-body -->
 
-              <!-- Right: Spent label -->
-              <div class="bowl-side-label">
-                <span class="bowl-side-val" id="bowl-spent-label">₹0</span>
-                <span class="bowl-side-key">💸 Spent</span>
-              </div>
+                <!-- Base -->
+                <div class="luxjar-base"></div>
 
+              </div><!-- /luxjar-outer -->
+            </div><!-- /luxjar-scene -->
+
+            <!-- Alerts -->
+            <div id="bowl-overflow-warn" class="lux-alert lux-warn hidden">
+              ⚠️ Spending exceeds income this period
+            </div>
+            <div id="bowl-no-income" class="lux-alert lux-hint">
+              Add income transactions to fill the vault
             </div>
 
-            <!-- Overflow warning -->
-            <div id="bowl-overflow-warn" class="bowl-overflow-warn hidden">
-              <i data-lucide="alert-triangle"></i>
-              Spending exceeds income this period!
+            <!-- Stats panel -->
+            <div class="luxjar-stats-panel">
+              <div class="luxjar-stat-item">
+                <span class="luxjar-stat-lbl">Income</span>
+                <span class="luxjar-stat-num" id="bowl-stat-income">₹0.00</span>
+              </div>
+              <div class="luxjar-stat-sep"></div>
+              <div class="luxjar-stat-item">
+                <span class="luxjar-stat-lbl">Spent</span>
+                <span class="luxjar-stat-num" id="bowl-stat-spent">₹0.00</span>
+              </div>
+              <div class="luxjar-stat-sep"></div>
+              <div class="luxjar-stat-item">
+                <span class="luxjar-stat-lbl">Remaining</span>
+                <span class="luxjar-stat-num" id="bowl-stat-remaining">₹0.00</span>
+              </div>
             </div>
 
-            <!-- No-income hint -->
-            <div id="bowl-no-income" class="bowl-no-income">
-              <i data-lucide="info"></i>
-              Add income transactions to fill the bowl.
-            </div>
-
-            <!-- Stats row -->
-            <div class="bowl-stats-row">
-              <div class="bowl-stat">
-                <div class="bowl-stat-icon income-icon">💰</div>
-                <div class="bowl-stat-body">
-                  <span class="bowl-stat-label">Income</span>
-                  <span class="bowl-stat-val" id="bowl-stat-income" style="color:#10b981">₹0.00</span>
-                </div>
-              </div>
-              <div class="bowl-stat">
-                <div class="bowl-stat-icon expense-icon">💸</div>
-                <div class="bowl-stat-body">
-                  <span class="bowl-stat-label">Spent</span>
-                  <span class="bowl-stat-val" id="bowl-stat-spent" style="color:#ef4444">₹0.00</span>
-                </div>
-              </div>
-              <div class="bowl-stat">
-                <div class="bowl-stat-icon remain-icon">🏦</div>
-                <div class="bowl-stat-body">
-                  <span class="bowl-stat-label">Remaining</span>
-                  <span class="bowl-stat-val" id="bowl-stat-remaining">₹0.00</span>
-                </div>
-              </div>
-            </div>
+            <!-- Hidden: keeps JS IDs working -->
+            <span id="bowl-income-label" style="display:none"></span>
+            <span id="bowl-spent-label"  style="display:none"></span>
 
           </div>
         </section>
