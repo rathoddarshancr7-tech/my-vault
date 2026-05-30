@@ -17,6 +17,10 @@ let undoBuffer      = null; // { tx, timer } — pending delete
 let savingsGoal     = 0;    // monthly savings target (₹)
 let bulkMode        = false;
 let bulkSelected    = new Set();
+let voiceRecognition = null;
+let reminderTimerId  = null;
+let tesseractLoaded  = false;
+let tesseractLoading = false;
 
 // ── DOM ────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -702,6 +706,9 @@ async function handleBillFile(file) {
   billThumb.style.display = currentBill.type.startsWith('image/') ? 'block' : 'none';
   uploadZone.classList.add('hidden');
   billPreview.classList.remove('hidden');
+  // Show scan button only for images (not PDFs)
+  const scanBtn = $('scan-receipt-btn');
+  if (scanBtn) scanBtn.classList.toggle('hidden', !currentBill.type.startsWith('image/'));
 }
 
 // ── PDF Export ─────────────────────────────────────────────────────
@@ -1573,6 +1580,7 @@ billFileInput.addEventListener('change', e => { const f = e.target.files[0]; if 
 removeBillBtn.addEventListener('click', () => {
   currentBill = null; billFileInput.value = '';
   billPreview.classList.add('hidden'); uploadZone.classList.remove('hidden');
+  $('scan-receipt-btn')?.classList.add('hidden');
 });
 
 // Submit
@@ -1759,6 +1767,46 @@ $('set-goal-btn')?.addEventListener('click', setSavingsGoal);
 $('bulk-select-btn')?.addEventListener('click', toggleBulkMode);
 $('bulk-delete-btn')?.addEventListener('click', bulkDeleteSelected);
 $('dismiss-recurring-btn')?.addEventListener('click', () => $('recurring-reminder').classList.add('hidden'));
+
+// Voice input
+$('voice-input-btn')?.addEventListener('click', openVoiceOverlay);
+$('voice-close-btn')?.addEventListener('click', closeVoiceOverlay);
+$('voice-mic-btn')?.addEventListener('click', startVoiceListening);
+$('voice-overlay')?.addEventListener('click', e => {
+  if (e.target === $('voice-overlay')) closeVoiceOverlay();
+});
+
+// Scan receipt (OCR)
+$('scan-receipt-btn')?.addEventListener('click', scanReceiptImage);
+
+// Daily reminder
+$('reminder-btn')?.addEventListener('click', () => { closeSidebar(); openReminderModal(); });
+$('reminder-close-btn')?.addEventListener('click', closeReminderModal);
+$('reminder-modal')?.addEventListener('click', e => {
+  if (e.target === $('reminder-modal')) closeReminderModal();
+});
+$('reminder-enable-btn')?.addEventListener('click', async () => {
+  const t = $('reminder-time-input').value || '20:00';
+  const ok = await enableReminder(t);
+  if (ok) {
+    showToast(`🔔 Reminder set for ${t} daily!`);
+    const [h,m] = t.split(':');
+    const d = new Date(); d.setHours(+h,+m,0,0);
+    if (d <= new Date()) d.setDate(d.getDate()+1);
+    const label = d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    $('reminder-status-text').textContent = `🔔 Next reminder: ${label}`;
+    $('reminder-enable-btn').textContent = 'Update Time';
+    $('reminder-disable-btn').classList.remove('hidden');
+  }
+});
+$('reminder-disable-btn')?.addEventListener('click', async () => {
+  await disableReminder();
+  $('reminder-status-text').textContent = '🔕 Reminder is off';
+  $('reminder-enable-btn').textContent = 'Enable';
+  $('reminder-disable-btn').classList.add('hidden');
+  showToast('Reminder disabled.');
+});
+
 menuBtn.addEventListener('click', openSidebar);
 sidebarOverlay.addEventListener('click', closeSidebar);
 sidebarCloseBtn.addEventListener('click', closeSidebar);
@@ -1820,8 +1868,365 @@ $('split-modal').addEventListener('click', e => { if (e.target === $('split-moda
 closeModalBtn.addEventListener('click', closeBillModal);
 billModal.addEventListener('click', e => { if (e.target === billModal) closeBillModal(); });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeBillModal(); closeSplitModal(); }
+  if (e.key === 'Escape') {
+    closeBillModal(); closeSplitModal();
+    closeVoiceOverlay(); closeReminderModal();
+  }
 });
+
+// ── Voice Input ────────────────────────────────────────────────────
+function initVoiceInput() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) return;
+  voiceRecognition = new SpeechRec();
+  voiceRecognition.lang = 'en-IN';
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = true;
+  voiceRecognition.maxAlternatives = 1;
+
+  voiceRecognition.onresult = e => {
+    let transcript = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      transcript += e.results[i][0].transcript;
+    }
+    const el = $('voice-transcript');
+    if (el) el.textContent = transcript;
+    if (e.results[e.results.length - 1].isFinal) {
+      processVoiceTranscript(transcript.trim());
+    }
+  };
+  voiceRecognition.onerror = e => {
+    const st = $('voice-status');
+    if (st) st.textContent = `Couldn't hear. Tap mic to retry.`;
+    $('voice-mic-btn')?.classList.remove('listening');
+  };
+  voiceRecognition.onend = () => {
+    $('voice-mic-btn')?.classList.remove('listening');
+    const t = $('voice-transcript')?.textContent?.trim();
+    if (t && !$('voice-parsed-wrap')?.children.length) {
+      processVoiceTranscript(t);
+    }
+  };
+}
+
+function parseVoiceTransaction(text) {
+  const lower = text.toLowerCase();
+  const result = { amount: null, category: null, payee: null, mode: null };
+
+  // Amount: numbers like 500, ₹500, 1,500, 500 rupees
+  const amtMatch = text.match(/₹?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:rs|rupees?)?/i);
+  if (amtMatch) result.amount = parseFloat(amtMatch[1].replace(/,/g, ''));
+
+  // Word numbers fallback
+  if (!result.amount) {
+    const wordNums = {
+      'one hundred':100,'two hundred':200,'three hundred':300,'four hundred':400,
+      'five hundred':500,'six hundred':600,'seven hundred':700,'eight hundred':800,
+      'nine hundred':900,'one thousand':1000,'two thousand':2000,'three thousand':3000,
+      'five thousand':5000,'ten thousand':10000
+    };
+    for (const [w, v] of Object.entries(wordNums)) {
+      if (lower.includes(w)) { result.amount = v; break; }
+    }
+  }
+
+  // Category keyword map
+  const catMap = [
+    [['food','eat','restaurant','lunch','dinner','breakfast','zomato','swiggy','dominos','pizza','biryani'],'Food'],
+    [['travel','cab','uber','ola','flight','train','bus','auto','metro','ticket','rickshaw','petrol','fuel'],'Travel'],
+    [['rent','house','flat','apartment','pg','hostel'],'Rent'],
+    [['electricity','electric','light bill','power bill','current bill','gas bill','water bill'],'Electricity'],
+    [['grocery','grocer','vegetable','fruit','kirana','bigbasket','blinkit','zepto'],'Grocery'],
+    [['shopping','amazon','flipkart','meesho','cloth','dress','shirt','shoes','myntra'],'Shopping'],
+    [['lending','lend','loan','borrow','credit','advance'],'Lending Money'],
+  ];
+  for (const [kws, cat] of catMap) {
+    if (kws.some(k => lower.includes(k))) { result.category = cat; break; }
+  }
+  // Default to Miscellaneous if nothing found
+  if (!result.category) result.category = 'Miscellaneous';
+
+  // Payment mode
+  const modeKws = [
+    [['cash'],'cash'],[['paytm'],'paytm'],[['phonepe','phone pe'],'phonepe'],
+    [['credit card','credit'],'credit_card'],[['debit card','debit'],'debit_card'],
+    [['upi','gpay','google pay'],'upi'],[['bank','neft','imps','rtgs'],'bank'],
+  ];
+  for (const [kws, mode] of modeKws) {
+    if (kws.some(k => lower.includes(k))) { result.mode = mode; break; }
+  }
+
+  // Payee: after "to", "at", "from", "paid to"
+  const payeeMatch = text.match(/(?:paid?\s+to|to|at|from)\s+([A-Za-z][A-Za-z\s]{1,25}?)(?:\s+(?:for|using|via|by|with|on)|[,.]|$)/i);
+  if (payeeMatch) result.payee = payeeMatch[1].trim();
+
+  return result;
+}
+
+function processVoiceTranscript(text) {
+  if (!text) return;
+  const parsed = parseVoiceTransaction(text);
+  const st = $('voice-status');
+  if (st) st.textContent = 'Got it! Confirm below:';
+
+  const wrap = $('voice-parsed-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const tags = [];
+  if (parsed.amount !== null)  tags.push(['Amount', `₹${parsed.amount}`]);
+  if (parsed.category)         tags.push(['Category', parsed.category]);
+  if (parsed.payee)            tags.push(['Payee', parsed.payee]);
+  if (parsed.mode)             tags.push(['Mode', parsed.mode.replace('_',' ')]);
+
+  wrap.innerHTML = tags.map(([l,v]) => `
+    <div class="voice-tag">
+      <span class="vtag-label">${l}</span>
+      <span class="vtag-val">${v}</span>
+    </div>`).join('');
+
+  const applyBtn = $('voice-apply-btn');
+  if (applyBtn) {
+    applyBtn.classList.remove('hidden');
+    applyBtn.onclick = () => applyVoiceToForm(parsed);
+  }
+}
+
+function applyVoiceToForm(parsed) {
+  closeVoiceOverlay();
+  showSection('add');
+  if (parsed.amount !== null) $('amount').value = parsed.amount;
+  if (parsed.category) categorySelect.value = parsed.category;
+  if (parsed.payee) {
+    payeeGroup.classList.remove('hidden');
+    payeeInput.value = parsed.payee;
+  }
+  if (parsed.mode) {
+    paymentModes.querySelectorAll('.mode-chip').forEach(c => c.classList.remove('active'));
+    const chip = paymentModes.querySelector(`[data-mode="${parsed.mode}"]`);
+    if (chip) { chip.classList.add('active'); paymentModeHidden.value = parsed.mode; }
+  }
+  checkPayeeRequired();
+  showToast('🎙️ Voice filled! Review & submit.');
+}
+
+function openVoiceOverlay() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) {
+    showToast('Voice input not supported on this browser. Try Chrome.', 'warning');
+    return;
+  }
+  $('voice-overlay').classList.remove('hidden');
+  $('voice-transcript').textContent = '';
+  $('voice-status').textContent = 'Tap mic to start';
+  $('voice-parsed-wrap').innerHTML = '';
+  $('voice-apply-btn').classList.add('hidden');
+  lucide.createIcons();
+}
+
+function closeVoiceOverlay() {
+  $('voice-overlay').classList.add('hidden');
+  if (voiceRecognition) { try { voiceRecognition.stop(); } catch(e) {} }
+  $('voice-mic-btn')?.classList.remove('listening');
+}
+
+function startVoiceListening() {
+  if (!voiceRecognition) initVoiceInput();
+  if (!voiceRecognition) return;
+  $('voice-transcript').textContent = '';
+  $('voice-status').textContent = 'Listening…';
+  $('voice-parsed-wrap').innerHTML = '';
+  $('voice-apply-btn').classList.add('hidden');
+  $('voice-mic-btn').classList.add('listening');
+  try {
+    voiceRecognition.start();
+  } catch(e) {
+    // already running — recreate
+    initVoiceInput();
+    setTimeout(() => {
+      $('voice-mic-btn').classList.add('listening');
+      try { voiceRecognition.start(); } catch(e2) {}
+    }, 150);
+  }
+}
+
+// ── Daily Reminder ──────────────────────────────────────────────────
+function getReminderSettings() {
+  try { return JSON.parse(localStorage.getItem('vault_reminder') || 'null'); }
+  catch { return null; }
+}
+function saveReminderSettings(s) {
+  localStorage.setItem('vault_reminder', JSON.stringify(s));
+}
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  const p = await Notification.requestPermission();
+  return p === 'granted';
+}
+
+function scheduleNextReminder(timeStr) {
+  if (reminderTimerId) clearTimeout(reminderTimerId);
+  const [h, m] = timeStr.split(':').map(Number);
+  const now = new Date();
+  const target = new Date();
+  target.setHours(h, m, 0, 0);
+  if (target <= now) target.setDate(target.getDate() + 1);
+  const delay = target - now;
+  reminderTimerId = setTimeout(() => {
+    fireReminder();
+    scheduleNextReminder(timeStr);
+  }, delay);
+}
+
+function fireReminder() {
+  if (Notification.permission !== 'granted') return;
+  try {
+    new Notification('My Vault 💸', {
+      body: "Don't forget to log today's expenses!",
+      icon: './icon.svg',
+      tag: 'daily-reminder',
+    });
+  } catch(e) {}
+}
+
+async function enableReminder(timeStr) {
+  const granted = await requestNotificationPermission();
+  if (!granted) {
+    showToast('Allow notifications in browser settings first.', 'warning');
+    return false;
+  }
+  saveReminderSettings({ enabled: true, time: timeStr });
+  scheduleNextReminder(timeStr);
+  // Register Periodic Background Sync for installed PWA on Android
+  if ('serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if ('periodicSync' in reg) {
+        await reg.periodicSync.register('expense-reminder', {
+          minInterval: 24 * 60 * 60 * 1000
+        });
+      }
+    } catch(e) { /* not supported or not installed as PWA */ }
+  }
+  return true;
+}
+
+async function disableReminder() {
+  if (reminderTimerId) clearTimeout(reminderTimerId);
+  reminderTimerId = null;
+  saveReminderSettings({ enabled: false, time: $('reminder-time-input')?.value || '20:00' });
+  if ('serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if ('periodicSync' in reg) await reg.periodicSync.unregister('expense-reminder');
+    } catch(e) {}
+  }
+}
+
+function initReminder() {
+  const s = getReminderSettings();
+  if (s?.enabled && s.time) scheduleNextReminder(s.time);
+}
+
+function openReminderModal() {
+  const s = getReminderSettings();
+  $('reminder-time-input').value = s?.time || '20:00';
+  const isOn = s?.enabled || false;
+  $('reminder-status-text').textContent = isOn ? '🔔 Reminder is ON' : '🔕 Reminder is off';
+  $('reminder-enable-btn').textContent = isOn ? 'Update Time' : 'Enable';
+  $('reminder-disable-btn').classList.toggle('hidden', !isOn);
+  $('reminder-modal').classList.remove('hidden');
+  lucide.createIcons();
+}
+function closeReminderModal() { $('reminder-modal').classList.add('hidden'); }
+
+// ── Receipt OCR ─────────────────────────────────────────────────────
+async function loadTesseract() {
+  if (tesseractLoaded) return true;
+  if (tesseractLoading) {
+    return new Promise(resolve => {
+      const id = setInterval(() => {
+        if (tesseractLoaded) { clearInterval(id); resolve(true); }
+      }, 250);
+    });
+  }
+  tesseractLoading = true;
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload  = () => { tesseractLoaded = true; tesseractLoading = false; resolve(true); };
+    s.onerror = () => { tesseractLoading = false; reject(false); };
+    document.head.appendChild(s);
+  });
+}
+
+function extractAmountFromText(text) {
+  const patterns = [
+    /(?:grand\s+)?total\s*[:\-]?\s*₹?\s*(\d[\d,]*(?:\.\d{1,2})?)/i,
+    /amount\s+(?:due|paid|payable|charged)\s*[:\-]?\s*₹?\s*(\d[\d,]*(?:\.\d{1,2})?)/i,
+    /net\s+(?:amount|total|payable)\s*[:\-]?\s*₹?\s*(\d[\d,]*(?:\.\d{1,2})?)/i,
+    /(?:bill|invoice|order)\s+(?:amount|total)\s*[:\-]?\s*₹?\s*(\d[\d,]*(?:\.\d{1,2})?)/i,
+    /₹\s*(\d[\d,]*(?:\.\d{1,2})?)/,
+    /(\d[\d,]*\.\d{2})\s*(?:rs|inr|rupees?)?/i,
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m) {
+      const v = parseFloat(m[1].replace(/,/g,''));
+      if (v > 0) return v;
+    }
+  }
+  return null;
+}
+
+function extractMerchantFromText(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  for (const line of lines.slice(0, 5)) {
+    if (line.length >= 3 && line.length <= 50
+      && !/^\d/.test(line)
+      && !/^(receipt|invoice|tax|vat|gst|date|time|order|bill|ref|transaction)/i.test(line)) {
+      return line;
+    }
+  }
+  return null;
+}
+
+async function scanReceiptImage() {
+  if (!currentBill || !currentBill.type.startsWith('image/')) {
+    showToast('Attach an image receipt first.', 'warning');
+    return;
+  }
+  $('ocr-overlay').classList.remove('hidden');
+  $('ocr-status').textContent = 'Loading OCR engine…';
+  try {
+    await loadTesseract();
+    $('ocr-status').textContent = 'Scanning receipt…';
+    const { data: { text } } = await Tesseract.recognize(currentBill.data, 'eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          const el = $('ocr-status');
+          if (el) el.textContent = `Scanning… ${pct}%`;
+        }
+      }
+    });
+    const amount   = extractAmountFromText(text);
+    const merchant = extractMerchantFromText(text);
+    $('ocr-overlay').classList.add('hidden');
+    if (amount) {
+      $('amount').value = amount;
+      if (merchant) $('note').value = merchant;
+      checkPayeeRequired();
+      showToast(`📄 Found ₹${amount}${merchant ? ' · ' + merchant : ''}`);
+    } else {
+      showToast('No amount found. Try a clearer photo.', 'warning');
+    }
+  } catch(e) {
+    $('ocr-overlay').classList.add('hidden');
+    showToast('OCR failed. Try a clearer image.', 'warning');
+  }
+}
 
 // ── Toast ──────────────────────────────────────────────────────────
 let toastTimer;
@@ -1836,3 +2241,5 @@ function showToast(msg, type = 'success') {
 lucide.createIcons();
 initBiometricUI();
 initDarkMode();
+initVoiceInput();
+initReminder();

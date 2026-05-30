@@ -1104,3 +1104,176 @@ button:not([disabled]), .mode-chip, .bill-card,
   .analytics-stats { grid-template-columns: 1fr; }
   .cal-cell { min-height: 40px; }
 }
+
+/* ────────────────────────────────────────────────────────────────── */
+/* ── Voice Input ──────────────────────────────────────────────────  */
+/* ────────────────────────────────────────────────────────────────── */
+
+/* Form title row with voice button */
+.form-title-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.form-title-row .form-title { margin-bottom: 0; }
+
+.voice-btn {
+  display: flex; align-items: center; gap: 6px; font-size: .82rem;
+  color: var(--accent); border: 1.5px solid var(--border); border-radius: var(--radius-xs);
+  padding: 7px 12px; transition: background var(--transition), border-color var(--transition);
+}
+.voice-btn:hover { background: var(--accent-light); border-color: var(--border-dark); }
+
+/* Voice overlay: fullscreen dark backdrop */
+.voice-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(10, 8, 30, 0.94);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.voice-modal {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 48px 28px 40px; gap: 18px; max-width: 360px; width: 100%;
+  position: relative;
+}
+.voice-close-x {
+  position: absolute; top: 8px; right: 4px;
+  color: rgba(255,255,255,.5); border: none;
+}
+.voice-close-x:hover { color: rgba(255,255,255,.9); }
+.voice-hint-label {
+  font-size: .78rem; color: rgba(255,255,255,.4);
+  text-align: center; letter-spacing: .02em;
+}
+/* Pulsing rings around mic */
+.voice-icon-wrap {
+  position: relative; width: 80px; height: 80px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 12px 0;
+}
+.voice-ring {
+  position: absolute; border-radius: 50%;
+  background: rgba(99, 102, 241, 0.14);
+  animation: voicePulse 2.4s ease-out infinite;
+}
+.voice-ring.ring-1 { width: 80px;  height: 80px;  animation-delay: 0s; }
+.voice-ring.ring-2 { width: 120px; height: 120px; animation-delay: .5s; }
+.voice-ring.ring-3 { width: 160px; height: 160px; animation-delay: 1s; }
+@keyframes voicePulse {
+  0%   { opacity: .7; transform: scale(.65); }
+  100% { opacity: 0;  transform: scale(1.1); }
+}
+/* Mic button */
+.voice-mic-btn {
+  position: relative; z-index: 1;
+  width: 72px; height: 72px; border-radius: 50%;
+  background: var(--grad-primary); border: none; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 28px rgba(99,102,241,.6);
+  transition: transform .15s, box-shadow .15s;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.voice-mic-btn i { width: 28px; height: 28px; pointer-events: none; }
+.voice-mic-btn:active { transform: scale(.94); }
+.voice-mic-btn.listening {
+  animation: micPulse 1.1s ease-in-out infinite;
+}
+@keyframes micPulse {
+  0%   { box-shadow: 0 0 0 0   rgba(99,102,241,.75); }
+  70%  { box-shadow: 0 0 0 18px rgba(99,102,241,0); }
+  100% { box-shadow: 0 0 0 0   rgba(99,102,241,0); }
+}
+/* Transcript display */
+.voice-status {
+  color: rgba(255,255,255,.55); font-size: .88rem; text-align: center;
+}
+.voice-transcript {
+  color: #fff; font-size: 1.05rem; text-align: center;
+  min-height: 26px; font-weight: 500; max-width: 300px;
+  line-height: 1.5;
+}
+/* Parsed field chips */
+.voice-parsed-wrap {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  max-width: 320px;
+}
+.voice-tag {
+  background: rgba(99,102,241,.22);
+  border: 1px solid rgba(99,102,241,.45);
+  border-radius: 20px; padding: 6px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 80px;
+}
+.vtag-label {
+  font-size: .6rem; color: rgba(255,255,255,.45);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.vtag-val { font-size: .92rem; color: #fff; font-weight: 600; }
+
+/* ── Scan Receipt button ──────────────────────────────────────────  */
+.scan-receipt-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  color: var(--accent); border-color: var(--accent); font-size: .9rem;
+  margin-top: 8px;
+}
+.scan-receipt-btn:hover { background: var(--accent-light); }
+
+/* ────────────────────────────────────────────────────────────────── */
+/* ── OCR Scanning Overlay ─────────────────────────────────────────  */
+/* ────────────────────────────────────────────────────────────────── */
+.ocr-overlay {
+  position: fixed; inset: 0; z-index: 1200;
+  background: rgba(10, 8, 30, .9);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.ocr-modal {
+  display: flex; flex-direction: column; align-items: center; gap: 24px;
+  padding: 40px 32px;
+}
+.ocr-scanner-frame {
+  width: 180px; height: 180px;
+  border: 2px solid rgba(99,102,241,.5);
+  border-radius: 14px; position: relative; overflow: hidden;
+  background: rgba(99,102,241,.04);
+}
+/* Corner accent lines */
+.ocr-scanner-frame::before,
+.ocr-scanner-frame::after {
+  content: '';
+  position: absolute; width: 24px; height: 24px;
+  border-color: var(--accent); border-style: solid;
+}
+.ocr-scanner-frame::before { top: 6px; left: 6px; border-width: 2px 0 0 2px; border-radius: 4px 0 0 0; }
+.ocr-scanner-frame::after  { bottom: 6px; right: 6px; border-width: 0 2px 2px 0; border-radius: 0 0 4px 0; }
+
+.ocr-scanner-line {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, #6366f1 40%, #8b5cf6 60%, transparent 100%);
+  animation: scanLine 2s linear infinite;
+  box-shadow: 0 0 12px rgba(99,102,241,.9);
+}
+@keyframes scanLine {
+  0%   { top: 0; }
+  50%  { top: calc(100% - 3px); }
+  100% { top: 0; }
+}
+.ocr-status {
+  color: rgba(255,255,255,.85); font-size: .95rem;
+  text-align: center; font-weight: 500;
+}
+.ocr-sub {
+  color: rgba(255,255,255,.35); font-size: .78rem; text-align: center;
+  margin-top: -16px;
+}
+
+/* ────────────────────────────────────────────────────────────────── */
+/* ── Reminder Modal ───────────────────────────────────────────────  */
+/* ────────────────────────────────────────────────────────────────── */
+.reminder-modal-box { max-width: 380px; }
+
+/* Dark mode overrides for new elements */
+[data-theme="dark"] .voice-btn { color: #a5b4fc; border-color: var(--border); }
+[data-theme="dark"] .voice-btn:hover { background: var(--surface-2); }
+[data-theme="dark"] .scan-receipt-btn { color: #a5b4fc; border-color: #4f46e5; }
+[data-theme="dark"] .scan-receipt-btn:hover { background: var(--surface-2); }

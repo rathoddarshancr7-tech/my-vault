@@ -1,4 +1,4 @@
-const CACHE = 'my-vault-v3';
+const CACHE = 'my-vault-v4';
 
 const APP_SHELL = [
   './',
@@ -27,6 +27,33 @@ self.addEventListener('activate', e => {
       ))
       .then(() => self.clients.claim())
   );
+});
+
+// ── Notification click: focus or open app ────────────────────────
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const existing = list.find(c => c.url.includes(self.location.origin));
+      if (existing) return existing.focus();
+      return clients.openWindow('./');
+    })
+  );
+});
+
+// ── Periodic Sync: daily expense reminder ────────────────────────
+self.addEventListener('periodicsync', e => {
+  if (e.tag === 'expense-reminder') {
+    e.waitUntil(
+      self.registration.showNotification('My Vault 💸', {
+        body: "Don't forget to log today's expenses!",
+        icon: './icon.svg',
+        badge: './icon.svg',
+        tag: 'daily-reminder',
+        renotify: true,
+      })
+    );
+  }
 });
 
 // ── Fetch ─────────────────────────────────────────────────────────
