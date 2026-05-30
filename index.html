@@ -569,90 +569,220 @@
           </div>
         </section>
 
-        <!-- ── MONEY BOWL (Luxury Vault Jar) ──────── -->
+        <!-- ── MONEY BOWL (Crystal Vase) ────────── -->
         <section id="section-moneybowl" class="section">
-          <div class="luxjar-page">
+          <div class="vasepage">
 
             <!-- Period toggle -->
-            <div class="luxjar-period-row">
+            <div class="vase-period-row">
               <button class="bowl-filter-btn active" data-period="month">This Month</button>
               <button class="bowl-filter-btn" data-period="all">All Time</button>
             </div>
 
-            <!-- Jar scene -->
-            <div class="luxjar-scene">
-              <div class="luxjar-ambient-glow"></div>
+            <!-- Crystal vase scene -->
+            <div class="vase-scene">
+              <div class="vase-ambient"></div>
 
-              <div class="luxjar-outer">
+              <div class="vase-svg-wrap">
 
-                <!-- Cap / lid -->
-                <div class="luxjar-cap-area">
-                  <div class="luxjar-cap"></div>
-                  <div class="luxjar-neck"></div>
+                <svg class="vase-svg" viewBox="0 0 300 480"
+                     xmlns="http://www.w3.org/2000/svg" overflow="visible">
+                  <defs>
+
+                    <!-- Sapphire liquid gradient -->
+                    <linearGradient id="liqGrad" x1="0" y1="1" x2="0" y2="0">
+                      <stop offset="0%"   stop-color="#1e3a8a"/>
+                      <stop offset="35%"  stop-color="#2563eb"/>
+                      <stop offset="70%"  stop-color="#3b82f6"/>
+                      <stop offset="100%" stop-color="#60a5fa" stop-opacity="0.92"/>
+                    </linearGradient>
+
+                    <!-- Radial inner glow for liquid -->
+                    <radialGradient id="liqGlow" cx="50%" cy="20%" r="55%">
+                      <stop offset="0%"   stop-color="#93c5fd" stop-opacity="0.32"/>
+                      <stop offset="100%" stop-color="#1e40af" stop-opacity="0"/>
+                    </radialGradient>
+
+                    <!-- Glass body shimmer -->
+                    <linearGradient id="glassGrad" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%"   stop-color="rgba(255,255,255,0.07)"/>
+                      <stop offset="18%"  stop-color="rgba(255,255,255,0.14)"/>
+                      <stop offset="50%"  stop-color="rgba(255,255,255,0.025)"/>
+                      <stop offset="82%"  stop-color="rgba(255,255,255,0.10)"/>
+                      <stop offset="100%" stop-color="rgba(255,255,255,0.04)"/>
+                    </linearGradient>
+
+                    <!-- Clip path: vase interior (walls ~10 px thick) -->
+                    <clipPath id="vase-clip">
+                      <path d="M 118,20
+                               C 113,20 100,30 98,54
+                               C 78,90 64,148 66,206
+                               C 68,256 72,304 84,348
+                               C 94,382 110,400 118,410
+                               C 122,420 122,430 116,440
+                               C 110,444 102,446 98,452
+                               L 98,460 L 202,460 L 202,452
+                               C 198,446 190,444 184,440
+                               C 178,430 178,420 182,410
+                               C 190,400 206,382 216,348
+                               C 228,304 232,256 234,206
+                               C 236,148 222,90 202,54
+                               C 200,30 187,20 182,20 Z"/>
+                    </clipPath>
+
+                  </defs>
+
+                  <!-- Ground reflection / shadow ellipse -->
+                  <ellipse cx="150" cy="473" rx="70" ry="9"
+                           fill="rgba(37,99,235,0.2)"/>
+
+                  <!-- Outer glass shape -->
+                  <path d="M 110,10
+                           C 105,10 90,22 88,48
+                           C 66,86 50,146 52,206
+                           C 54,258 58,308 70,354
+                           C 80,390 98,410 108,420
+                           C 114,430 114,440 108,450
+                           C 102,454 92,456 88,464
+                           L 88,470 L 212,470 L 212,464
+                           C 208,456 198,454 192,450
+                           C 186,440 186,430 192,420
+                           C 202,410 220,390 230,354
+                           C 242,308 246,258 248,206
+                           C 250,146 234,86 212,48
+                           C 210,22 195,10 190,10 Z"
+                        fill="url(#glassGrad)"
+                        stroke="rgba(147,197,253,0.18)"
+                        stroke-width="1.5"/>
+
+                  <!-- Liquid (clipped to vase interior) -->
+                  <g clip-path="url(#vase-clip)">
+                    <g id="bowl-liquid"
+                       style="transform:translateY(440px);transition:transform 1.4s cubic-bezier(.4,0,.2,1);will-change:transform">
+
+                      <!-- Liquid fill -->
+                      <rect x="0" y="0" width="300" height="480" fill="url(#liqGrad)"/>
+                      <!-- Inner glow -->
+                      <rect x="0" y="0" width="300" height="480" fill="url(#liqGlow)"/>
+
+                      <!-- Wave 1 (main) -->
+                      <path class="vase-wave-1"
+                            d="M-20,5 C10,-8 70,18 110,5 C150,-8 210,18 250,5
+                               C290,-8 350,18 390,5 L390,22 L-20,22 Z"
+                            fill="rgba(96,165,250,0.62)"/>
+                      <!-- Wave 2 (secondary) -->
+                      <path class="vase-wave-2"
+                            d="M-20,5 C20,18 80,-8 120,5 C160,18 220,-8 260,5
+                               C300,18 360,-8 400,5 L400,22 L-20,22 Z"
+                            fill="rgba(147,197,253,0.36)"/>
+
+                      <!-- Floating light particles -->
+                      <circle class="vp1" cx="82"  cy="210" r="2.8" fill="rgba(147,197,253,0.65)"/>
+                      <circle class="vp2" cx="186" cy="292" r="2"   fill="rgba(219,234,254,0.55)"/>
+                      <circle class="vp3" cx="128" cy="352" r="2.4" fill="rgba(147,197,253,0.45)"/>
+                      <circle class="vp4" cx="200" cy="186" r="1.6" fill="rgba(255,255,255,0.35)"/>
+                      <circle class="vp5" cx="102" cy="396" r="2"   fill="rgba(147,197,253,0.5)"/>
+
+                    </g>
+                  </g>
+
+                  <!-- Glass wall stroke (renders over liquid) -->
+                  <path d="M 110,10
+                           C 105,10 90,22 88,48
+                           C 66,86 50,146 52,206
+                           C 54,258 58,308 70,354
+                           C 80,390 98,410 108,420
+                           C 114,430 114,440 108,450
+                           C 102,454 92,456 88,464
+                           L 88,470 L 212,470 L 212,464
+                           C 208,456 198,454 192,450
+                           C 186,440 186,430 192,420
+                           C 202,410 220,390 230,354
+                           C 242,308 246,258 248,206
+                           C 250,146 234,86 212,48
+                           C 210,22 195,10 190,10 Z"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.12)"
+                        stroke-width="2"/>
+
+                  <!-- Primary left glass reflection streak -->
+                  <path d="M 118,22 C 108,60 98,122 100,192 C 102,252 106,302 114,342"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.5)"
+                        stroke-width="4.5"
+                        stroke-linecap="round"
+                        opacity="0.62"/>
+
+                  <!-- Secondary thin streak -->
+                  <path d="M 128,22 C 120,55 114,112 116,172"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.22)"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        opacity="0.52"/>
+
+                  <!-- Right edge shimmer -->
+                  <path d="M 184,22 C 188,52 192,102 190,158"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.16)"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        opacity="0.38"/>
+
+                  <!-- Glare orb (top-left of glass) -->
+                  <ellipse cx="124" cy="34" rx="13" ry="7"
+                           fill="rgba(255,255,255,0.42)"
+                           transform="rotate(-18,124,34)"/>
+                  <!-- Specular dot -->
+                  <circle cx="118" cy="26" r="3.5" fill="rgba(255,255,255,0.72)"/>
+
+                  <!-- Rim ellipse (top opening) -->
+                  <ellipse cx="150" cy="12" rx="42" ry="5.5"
+                           fill="rgba(96,165,250,0.1)"
+                           stroke="rgba(255,255,255,0.28)" stroke-width="1.5"/>
+
+                  <!-- Base ring -->
+                  <ellipse cx="150" cy="466" rx="66" ry="7"
+                           fill="none"
+                           stroke="rgba(147,197,253,0.18)" stroke-width="1"/>
+
+                </svg>
+
+                <!-- Centre text (HTML overlaid on SVG belly) -->
+                <div class="vase-center-text">
+                  <div class="vase-main-val" id="bowl-pct-val">—</div>
+                  <div class="vase-sub-txt" id="bowl-pct-sub">remaining</div>
                 </div>
 
-                <!-- Glass body -->
-                <div class="luxjar-body">
+                <!-- Drip zone (drop particles when spending) -->
+                <div id="vase-drip-zone" class="vase-drip-zone"></div>
 
-                  <!-- Liquid -->
-                  <div class="luxjar-liquid" id="bowl-liquid" style="height:0%">
-                    <div class="liq-wave-1"></div>
-                    <div class="liq-wave-2"></div>
-                    <div class="liq-glow"></div>
-                    <div class="liq-particle lp1"></div>
-                    <div class="liq-particle lp2"></div>
-                    <div class="liq-particle lp3"></div>
-                    <div class="liq-particle lp4"></div>
-                    <div class="liq-particle lp5"></div>
-                  </div>
-
-                  <!-- Glass reflections (above liquid) -->
-                  <div class="luxjar-glare-streak"></div>
-                  <div class="luxjar-glare-mini"></div>
-                  <div class="luxjar-glare-orb"></div>
-
-                  <!-- Tick marks -->
-                  <div class="luxjar-tick t75" data-label="75%"></div>
-                  <div class="luxjar-tick t50" data-label="50%"></div>
-                  <div class="luxjar-tick t25" data-label="25%"></div>
-
-                  <!-- Centre text -->
-                  <div class="luxjar-center-text">
-                    <div class="luxjar-main-val" id="bowl-pct-val">—</div>
-                    <div class="luxjar-sub-txt" id="bowl-pct-sub">remaining</div>
-                  </div>
-
-                </div><!-- /luxjar-body -->
-
-                <!-- Base -->
-                <div class="luxjar-base"></div>
-
-              </div><!-- /luxjar-outer -->
-            </div><!-- /luxjar-scene -->
+              </div><!-- /vase-svg-wrap -->
+            </div><!-- /vase-scene -->
 
             <!-- Alerts -->
             <div id="bowl-overflow-warn" class="lux-alert lux-warn hidden">
               ⚠️ Spending exceeds income this period
             </div>
             <div id="bowl-no-income" class="lux-alert lux-hint">
-              Add income transactions to fill the vault
+              Add income transactions to fill the vase
             </div>
 
             <!-- Stats panel -->
-            <div class="luxjar-stats-panel">
-              <div class="luxjar-stat-item">
-                <span class="luxjar-stat-lbl">Income</span>
-                <span class="luxjar-stat-num" id="bowl-stat-income">₹0.00</span>
+            <div class="vase-stats-panel">
+              <div class="vase-stat-item">
+                <span class="vase-stat-lbl">Income</span>
+                <span class="vase-stat-num" id="bowl-stat-income">₹0.00</span>
               </div>
-              <div class="luxjar-stat-sep"></div>
-              <div class="luxjar-stat-item">
-                <span class="luxjar-stat-lbl">Spent</span>
-                <span class="luxjar-stat-num" id="bowl-stat-spent">₹0.00</span>
+              <div class="vase-stat-sep"></div>
+              <div class="vase-stat-item">
+                <span class="vase-stat-lbl">Spent</span>
+                <span class="vase-stat-num" id="bowl-stat-spent">₹0.00</span>
               </div>
-              <div class="luxjar-stat-sep"></div>
-              <div class="luxjar-stat-item">
-                <span class="luxjar-stat-lbl">Remaining</span>
-                <span class="luxjar-stat-num" id="bowl-stat-remaining">₹0.00</span>
+              <div class="vase-stat-sep"></div>
+              <div class="vase-stat-item">
+                <span class="vase-stat-lbl">Remaining</span>
+                <span class="vase-stat-num" id="bowl-stat-remaining">₹0.00</span>
               </div>
             </div>
 

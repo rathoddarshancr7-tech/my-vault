@@ -1898,9 +1898,9 @@ function renderMoneyBowl() {
   const pct       = income > 0 ? Math.max(0, Math.min(100, (remaining / income) * 100)) : 0;
   const overflow   = expense > income && income > 0;
 
-  // ── Liquid level (teal always — only height changes) ─────────────
+  // ── Liquid level (SVG translateY — vase interior height 440 px) ──
   const liquid = $('bowl-liquid');
-  if (liquid) liquid.style.height = `${pct}%`;
+  if (liquid) liquid.style.transform = `translateY(${Math.round((100 - pct) / 100 * 440)}px)`;
 
   // ── Centre: show balance ₹ amount (large) + % text (small) ───────
   const valEl = $('bowl-pct-val');
@@ -1919,7 +1919,7 @@ function renderMoneyBowl() {
     if (income === 0)   subEl.textContent = 'add income to fill';
     else if (overflow)  subEl.textContent = 'overspent!';
     else                subEl.textContent = `${Math.round(pct)}%  remaining`;
-    subEl.style.color = overflow ? 'rgba(248,113,113,.7)' : 'rgba(0,212,180,.7)';
+    subEl.style.color = overflow ? 'rgba(248,113,113,.7)' : 'rgba(147,197,253,.75)';
   }
 
   // ── Stats panel ───────────────────────────────────────────────────
@@ -1931,7 +1931,7 @@ function renderMoneyBowl() {
   const sr = $('bowl-stat-remaining');
   if (sr) {
     sr.textContent = `${remaining < 0 ? '-' : ''}${fmt2(Math.abs(remaining))}`;
-    sr.style.color = remaining >= 0 ? '#00D4B4' : '#f87171';
+    sr.style.color = remaining >= 0 ? '#60a5fa' : '#f87171';
   }
 
   // ── Alerts ───────────────────────────────────────────────────────
@@ -1948,17 +1948,23 @@ function renderMoneyBowl() {
   spawnBowlDrip();
 }
 
-// Brief drip splash animation when liquid level drops
+// Brief drip splash animation when liquid level drops (SVG vase version)
 let lastBowlPct = null;
 function spawnBowlDrip() {
   const liquid = $('bowl-liquid');
   if (!liquid) return;
-  const curPct = parseFloat(liquid.style.height) || 0;
+  const tfm = liquid.style.transform || '';
+  const match = tfm.match(/translateY\(([\d.]+)px\)/);
+  const translatePx = match ? parseFloat(match[1]) : 440;
+  const curPct = Math.round((1 - translatePx / 440) * 100);
   if (lastBowlPct !== null && curPct < lastBowlPct) {
-    const drip = document.createElement('div');
-    drip.className = 'bowl-drip-particle';
-    liquid.appendChild(drip);
-    setTimeout(() => drip.remove(), 900);
+    const zone = $('vase-drip-zone');
+    if (zone) {
+      const drip = document.createElement('div');
+      drip.className = 'vase-drip-particle';
+      zone.appendChild(drip);
+      setTimeout(() => drip.remove(), 900);
+    }
   }
   lastBowlPct = curPct;
 }
