@@ -11,6 +11,8 @@ let calMonth = new Date().getMonth();
 let currentPassword = '';
 let currentSection  = 'dashboard';
 let currentBill     = null; // { name, type, data }
+let editingId       = null; // id of tx being edited, or null
+let splitTxId       = null; // id of tx being split, or null
 
 // ── DOM ────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -324,6 +326,9 @@ async function showApp(fromBiometric = false) {
 
 // ── Navigation ─────────────────────────────────────────────────────
 function showSection(name) {
+  // If navigating away from add while editing, reset form
+  if (currentSection === 'add' && name !== 'add' && editingId) resetFormToAdd();
+
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   const sec = $(`section-${name}`);
   if (sec) sec.classList.add('active');
@@ -389,6 +394,12 @@ function updateDashboard() {
   totalExpenseEl.textContent = `₹${expense.toFixed(2)}`;
   totalMonthEl.textContent   = `₹${monthExpense.toFixed(2)}`;
   totalCountEl.textContent   = count;
+
+  // ── Month forecast ────────────────────────────────────────────────
+  const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
+  const dayOfMonth  = now.getDate();
+  const dailyAvg    = dayOfMonth > 0 ? monthExpense / dayOfMonth : 0;
+  $('forecast-amount').textContent = `₹${(dailyAvg * daysInMonth).toFixed(2)}`;
 
   // ── Today's spend gadget ──────────────────────────────────────────
   const todayStr  = now.toISOString().slice(0, 10);
@@ -505,7 +516,11 @@ function createTxItem(tx, showDelete = true) {
     <div class="tx-right">
       <span class="tx-amount ${tx.type}">${sign}₹${tx.amount.toFixed(2)}</span>
       ${tx.bill ? `<span class="bill-clip" data-id="${tx.id}" title="View receipt"><i data-lucide="paperclip"></i></span>` : ''}
-      ${showDelete ? `<button class="tx-delete-btn" data-id="${tx.id}" title="Delete"><i data-lucide="trash-2"></i></button>` : ''}
+      ${showDelete ? `
+        <button class="tx-edit-btn" data-id="${tx.id}" title="Edit"><i data-lucide="pencil"></i></button>
+        <button class="tx-split-btn" data-id="${tx.id}" title="Split"><i data-lucide="scissors"></i></button>
+        <button class="tx-delete-btn" data-id="${tx.id}" title="Delete"><i data-lucide="trash-2"></i></button>
+      ` : ''}
     </div>`;
   return div;
 }
@@ -525,26 +540,30 @@ function getFiltered() {
   const type = filterType.value;
   const cat  = filterCategory.value;
   const mode = filterMode.value;
+  const from = $('filter-date-from')?.value || '';
+  const to   = $('filter-date-to')?.value   || '';
   return [...transactions]
     .filter(tx => {
       if (type !== 'all' && tx.type !== type) return false;
       if (cat  !== 'all' && tx.category !== cat) return false;
       if (mode !== 'all' && tx.paymentMode !== mode) return false;
+      if (from && tx.date < from) return false;
+      if (to   && tx.date > to)   return false;
       if (q) {
         const hay = [tx.category, tx.note, tx.payee, String(tx.amount), tx.date].join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     })
-    .sort((a,b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 20);
+    .sort((a,b) => new Date(b.date) - new Date(a.date));
 }
 
 function renderHistory() {
   const filtered = getFiltered();
+  const total = transactions.length;
   historyCount.textContent = filtered.length
-    ? `Showing ${filtered.length} of ${transactions.length} transaction${transactions.length!==1?'s':''}`
-    : '';
+    ? `Showing ${filtered.length} of ${total} transaction${total !== 1 ? 's' : ''}`
+    : (total ? 'No transactions match your filters.' : '');
   renderTxList(historyList, filtered);
 }
 
@@ -732,6 +751,191 @@ function exportPDF() {
   }
   doc.save('expense-vault-report.pdf');
   showToast('PDF downloaded!');
+}
+
+// ── CSV Export ─────────────────────────────────────────────────────
+function exportCSV() {
+  if (!transactions.length) { showToast('No transactions to export.', 'warning'); return; }
+  const sorted = [...transactions].sort((a,b) => new Date(b.date) - new Date(a.date));
+  const header = ['Date','Type','Category','Payee','Payment Mode','Amount (₹)','Note'];
+  const rows = sorted.map(tx => [
+    tx.date,
+    tx.type,
+    tx.category || '',
+    tx.payee || '',
+    PAYMENT_MODES[tx.paymentMode]?.label || tx.paymentMode || '',
+    (tx.type === 'income' ? '' : '-') + tx.amount.toFixed(2),
+    tx.note || ''
+  ]);
+  const csv = [header, ...rows]
+    .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'expense-vault-export.csv'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV downloaded!');
+}
+
+// ── Edit Transaction ───────────────────────────────────────────────
+function resetFormToAdd() {
+  editingId = null;
+  $('form-title-text').textContent  = 'New Transaction';
+  $('form-submit-label').textContent = 'Add Transaction';
+  $('form-submit-icon').setAttribute('data-lucide', 'plus');
+  $('cancel-edit-btn').classList.add('hidden');
+  lucide.createIcons();
+}
+
+function startEditTx(id) {
+  const tx = transactions.find(t => t.id === id);
+  if (!tx) return;
+  editingId = id;
+
+  $('form-title-text').textContent  = 'Edit Transaction';
+  $('form-submit-label').textContent = 'Update Transaction';
+  $('form-submit-icon').setAttribute('data-lucide', 'check');
+  $('cancel-edit-btn').classList.remove('hidden');
+
+  $('amount').value      = tx.amount;
+  $('date').value        = tx.date;
+  categorySelect.value   = tx.category || 'Food';
+  $('note').value        = tx.note  || '';
+  payeeInput.value       = tx.payee || '';
+
+  // payment mode chip
+  const mode = tx.paymentMode || 'cash';
+  paymentModes.querySelectorAll('.mode-chip').forEach(c => c.classList.remove('active'));
+  const chip = paymentModes.querySelector(`[data-mode="${mode}"]`);
+  if (chip) chip.classList.add('active');
+  paymentModeHidden.value = mode;
+
+  // payee visibility
+  checkPayeeRequired();
+  if (tx.payee) payeeGroup.classList.remove('hidden');
+
+  // bill
+  if (tx.bill) {
+    currentBill = tx.bill;
+    billThumb.src = tx.bill.data;
+    billNameEl.textContent = tx.bill.name;
+    billThumb.style.display = tx.bill.type.startsWith('image/') ? 'block' : 'none';
+    uploadZone.classList.add('hidden');
+    billPreview.classList.remove('hidden');
+  } else {
+    currentBill = null;
+    billPreview.classList.add('hidden');
+    uploadZone.classList.remove('hidden');
+  }
+
+  showSection('add');
+  lucide.createIcons();
+}
+
+// ── Split Modal ────────────────────────────────────────────────────
+function openSplitModal(txId) {
+  const tx = transactions.find(t => t.id === txId);
+  if (!tx) return;
+  splitTxId = txId;
+  $('split-original-info').textContent =
+    `${tx.category || 'Income'} · ₹${tx.amount.toFixed(2)} · ${formatDate(tx.date)}`;
+  $('split-rows').innerHTML = '';
+  const half = parseFloat((tx.amount / 2).toFixed(2));
+  addSplitRow(half, tx.category || 'Food', tx.date);
+  addSplitRow(parseFloat((tx.amount - half).toFixed(2)), tx.category || 'Food', tx.date);
+  updateSplitRemaining();
+  $('split-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  lucide.createIcons();
+}
+
+function addSplitRow(amount = 0, cat = 'Food', date = '') {
+  const rowId = crypto.randomUUID();
+  const div   = document.createElement('div');
+  div.className = 'split-row';
+  div.dataset.splitRowId = rowId;
+  const catOptions = Object.keys(CATEGORY_COLORS)
+    .map(c => `<option value="${c}" ${c === cat ? 'selected' : ''}>${CATEGORY_EMOJI[c]||'📦'} ${c}</option>`)
+    .join('');
+  div.innerHTML = `
+    <div class="split-row-fields">
+      <div class="input-with-icon split-amount-wrap">
+        <span class="input-prefix">₹</span>
+        <input type="number" class="split-amount-input" placeholder="Amount"
+               value="${amount > 0 ? amount.toFixed(2) : ''}" min="0.01" step="0.01">
+      </div>
+      <div class="select-wrapper split-cat-wrap">
+        <select class="split-cat-select">${catOptions}</select>
+      </div>
+      <input type="date" class="split-date-input filter-select" value="${date}">
+      <button type="button" class="btn ghost icon-btn split-remove-btn">
+        <i data-lucide="trash-2"></i>
+      </button>
+    </div>`;
+  div.querySelector('.split-amount-input').addEventListener('input', updateSplitRemaining);
+  div.querySelector('.split-remove-btn').addEventListener('click', () => {
+    div.remove(); updateSplitRemaining();
+  });
+  $('split-rows').appendChild(div);
+  lucide.createIcons();
+}
+
+function updateSplitRemaining() {
+  if (!splitTxId) return;
+  const tx = transactions.find(t => t.id === splitTxId);
+  if (!tx) return;
+  const total = [...$('split-rows').querySelectorAll('.split-amount-input')]
+    .reduce((s, inp) => s + (parseFloat(inp.value) || 0), 0);
+  const rem = tx.amount - total;
+  const el  = $('split-remaining');
+  el.textContent = rem < 0
+    ? `-₹${Math.abs(rem).toFixed(2)} over`
+    : `₹${rem.toFixed(2)} left`;
+  el.style.color = rem < 0 ? '#ef4444' : Math.abs(rem) < 0.01 ? '#10b981' : '#f59e0b';
+}
+
+async function confirmSplit() {
+  if (!splitTxId) return;
+  const tx = transactions.find(t => t.id === splitTxId);
+  if (!tx) return;
+  const rows = [...$('split-rows').querySelectorAll('.split-row')];
+  if (rows.length < 2) { showToast('Need at least 2 splits.', 'warning'); return; }
+  const splits = rows.map(row => ({
+    amount:   parseFloat(row.querySelector('.split-amount-input').value) || 0,
+    category: row.querySelector('.split-cat-select').value,
+    date:     row.querySelector('.split-date-input').value || tx.date,
+  }));
+  if (splits.some(s => s.amount <= 0)) {
+    showToast('All split amounts must be > 0.', 'warning'); return;
+  }
+  const total = splits.reduce((s, r) => s + r.amount, 0);
+  if (Math.abs(total - tx.amount) > 0.01) {
+    showToast(`Splits total ₹${total.toFixed(2)} — must equal ₹${tx.amount.toFixed(2)}.`, 'warning');
+    return;
+  }
+  transactions = transactions.filter(t => t.id !== splitTxId);
+  for (const s of splits) {
+    const newTx = {
+      id: crypto.randomUUID(), type: tx.type,
+      amount: s.amount, date: s.date, category: s.category,
+      paymentMode: tx.paymentMode
+    };
+    if (tx.note)  newTx.note  = `Split: ${tx.note}`;
+    if (tx.payee) newTx.payee = tx.payee;
+    transactions.push(newTx);
+  }
+  await saveData();
+  closeSplitModal();
+  updateDashboard();
+  if (currentSection === 'history') renderHistory();
+  showToast(`Split into ${splits.length} transactions! ✂️`);
+}
+
+function closeSplitModal() {
+  $('split-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+  splitTxId = null;
 }
 
 // ── Analytics ──────────────────────────────────────────────────────
@@ -1056,13 +1260,35 @@ transactionForm.addEventListener('submit', async e => {
   if (!amount || amount <= 0 || !date) return;
   if (amount > 5000 && !payee) { payeeInput.focus(); showToast('Please enter who you are paying.', 'warning'); return; }
 
-  const tx = { id: crypto.randomUUID(), type, amount, date, category, paymentMode: mode };
-  if (note)  tx.note  = note;
-  if (payee) tx.payee = payee;
-  if (currentBill) tx.bill = currentBill;
-
-  transactions.push(tx);
-  await saveData();
+  if (editingId) {
+    // ── Update existing transaction ──────────────────────────────
+    const idx = transactions.findIndex(t => t.id === editingId);
+    if (idx !== -1) {
+      transactions[idx] = { ...transactions[idx], amount, date, category, paymentMode: mode };
+      if (note)        transactions[idx].note  = note;  else delete transactions[idx].note;
+      if (payee)       transactions[idx].payee = payee; else delete transactions[idx].payee;
+      if (currentBill) transactions[idx].bill  = currentBill; else delete transactions[idx].bill;
+    }
+    editingId = null;
+    resetFormToAdd();
+    await saveData();
+    updateDashboard();
+    weeklyReminder.classList.add('hidden');
+    showToast('Transaction updated! ✏️');
+    showSection('history');
+  } else {
+    // ── Add new transaction ──────────────────────────────────────
+    const tx = { id: crypto.randomUUID(), type, amount, date, category, paymentMode: mode };
+    if (note)  tx.note  = note;
+    if (payee) tx.payee = payee;
+    if (currentBill) tx.bill = currentBill;
+    transactions.push(tx);
+    await saveData();
+    updateDashboard();
+    weeklyReminder.classList.add('hidden');
+    showToast('Transaction added!');
+    showSection('dashboard');
+  }
 
   // Reset form
   transactionForm.reset();
@@ -1074,11 +1300,6 @@ transactionForm.addEventListener('submit', async e => {
   paymentModeHidden.value = 'cash';
   currentBill = null; billFileInput.value = '';
   billPreview.classList.add('hidden'); uploadZone.classList.remove('hidden');
-
-  updateDashboard();
-  weeklyReminder.classList.add('hidden');
-  showToast('Transaction added!');
-  showSection('dashboard');
   lucide.createIcons();
 });
 
@@ -1098,12 +1319,16 @@ function handleDeleteClick(e) {
 historyList.addEventListener('click', handleDeleteClick);
 recentList.addEventListener('click', handleDeleteClick);
 
-// Bill clip click
+// Bill clip click + edit + split (delegation on content area)
 document.querySelector('.content-area').addEventListener('click', e => {
   const clip = e.target.closest('.bill-clip');
-  if (clip) openBillModal(clip.dataset.id);
+  if (clip) { openBillModal(clip.dataset.id); return; }
   const billCard = e.target.closest('.bill-card');
-  if (billCard) openBillModal(billCard.dataset.id);
+  if (billCard) { openBillModal(billCard.dataset.id); return; }
+  const editBtn = e.target.closest('.tx-edit-btn');
+  if (editBtn) { startEditTx(editBtn.dataset.id); return; }
+  const splitBtn = e.target.closest('.tx-split-btn');
+  if (splitBtn) { openSplitModal(splitBtn.dataset.id); return; }
   const navLink = e.target.closest('[data-section]');
   if (navLink && !navLink.classList.contains('nav-item') && !navLink.classList.contains('bnav-item') && !navLink.classList.contains('bnav-fab')) {
     showSection(navLink.dataset.section);
@@ -1175,6 +1400,7 @@ togglePwBtn.addEventListener('click', () => {
 
 lockBtn.addEventListener('click', lockVault);
 exportBtn.addEventListener('click', exportPDF);
+$('export-csv-btn')?.addEventListener('click', () => { closeSidebar(); exportCSV(); });
 menuBtn.addEventListener('click', openSidebar);
 sidebarOverlay.addEventListener('click', closeSidebar);
 sidebarCloseBtn.addEventListener('click', closeSidebar);
@@ -1202,15 +1428,42 @@ document.addEventListener('click', e => {
   if (item) showSection(item.dataset.section);
 });
 
+// Cancel edit
+$('cancel-edit-btn').addEventListener('click', () => {
+  resetFormToAdd();
+  transactionForm.reset();
+  $('date').valueAsDate = new Date();
+  paymentModes.querySelectorAll('.mode-chip').forEach(c => c.classList.remove('active'));
+  paymentModes.querySelector('[data-mode="cash"]').classList.add('active');
+  paymentModeHidden.value = 'cash';
+  payeeGroup.classList.add('hidden');
+  payeeInput.required = false;
+  currentBill = null; billFileInput.value = '';
+  billPreview.classList.add('hidden'); uploadZone.classList.remove('hidden');
+  showSection('history');
+});
+
+// Split modal controls
+$('add-split-row-btn').addEventListener('click', () => {
+  const tx = splitTxId ? transactions.find(t => t.id === splitTxId) : null;
+  addSplitRow(0, tx?.category || 'Food', tx?.date || new Date().toISOString().slice(0,10));
+});
+$('confirm-split-btn').addEventListener('click', confirmSplit);
+$('close-split-modal-btn').addEventListener('click', closeSplitModal);
+$('split-modal').addEventListener('click', e => { if (e.target === $('split-modal')) closeSplitModal(); });
+
 // Filters
-[searchInput, filterType, filterCategory, filterMode].forEach(el =>
+[searchInput, filterType, filterCategory, filterMode,
+ $('filter-date-from'), $('filter-date-to')].forEach(el =>
   el?.addEventListener('input', () => { if (currentSection==='history') renderHistory(); })
 );
 
 // Modal close
 closeModalBtn.addEventListener('click', closeBillModal);
 billModal.addEventListener('click', e => { if (e.target === billModal) closeBillModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBillModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeBillModal(); closeSplitModal(); }
+});
 
 // ── Toast ──────────────────────────────────────────────────────────
 let toastTimer;

@@ -153,6 +153,9 @@
         <button class="nav-item" id="export-btn">
           <i data-lucide="file-down"></i><span>Export PDF</span>
         </button>
+        <button class="nav-item" id="export-csv-btn">
+          <i data-lucide="file-spreadsheet"></i><span>Export CSV</span>
+        </button>
         <button class="nav-item hidden" id="enable-faceid-sidebar-btn">
           <i data-lucide="scan-face"></i><span>Enable Face ID</span>
         </button>
@@ -224,6 +227,13 @@
                 <span id="total-count" class="stat-value">0</span>
               </div>
             </div>
+            <div class="stat-card card-forecast">
+              <div class="stat-icon"><i data-lucide="trending-up"></i></div>
+              <div class="stat-body">
+                <span class="stat-label">Month Forecast</span>
+                <span id="forecast-amount" class="stat-value">₹0.00</span>
+              </div>
+            </div>
           </div>
 
           <div class="dashboard-grid">
@@ -258,7 +268,7 @@
         <!-- ── ADD TRANSACTION ────────────────────── -->
         <section id="section-add" class="section">
           <div class="card form-section">
-            <h3 class="form-title">New Transaction</h3>
+            <h3 class="form-title" id="form-title-text">New Transaction</h3>
             <form id="transaction-form">
 
               <div class="form-row">
@@ -337,8 +347,12 @@
                 </div>
               </div>
 
-              <button type="submit" class="btn primary full-width">
-                <i data-lucide="plus"></i> Add Transaction
+              <button type="submit" class="btn primary full-width" id="form-submit-btn">
+                <i data-lucide="plus" id="form-submit-icon"></i>
+                <span id="form-submit-label">Add Transaction</span>
+              </button>
+              <button type="button" class="btn outline full-width hidden" id="cancel-edit-btn" style="margin-top:10px">
+                <i data-lucide="x"></i> Cancel Edit
               </button>
             </form>
           </div>
@@ -379,6 +393,11 @@
                   <option value="upi">UPI</option>
                   <option value="bank">Bank</option>
                 </select>
+                <div class="date-range-row">
+                  <input type="date" id="filter-date-from" class="filter-select" title="From date">
+                  <span class="date-range-sep">→</span>
+                  <input type="date" id="filter-date-to" class="filter-select" title="To date">
+                </div>
               </div>
             </div>
             <p id="history-count" class="history-count"></p>
@@ -495,6 +514,34 @@
 
     </div><!-- /main-wrapper -->
   </div><!-- /app-shell -->
+
+  <!-- Split Transaction Modal -->
+  <div id="split-modal" class="modal-overlay hidden">
+    <div class="modal-box split-modal-box">
+      <div class="modal-header">
+        <div>
+          <h3>Split Transaction</h3>
+          <p id="split-original-info" class="modal-subtitle"></p>
+        </div>
+        <button id="close-split-modal-btn" class="btn ghost icon-btn"><i data-lucide="x"></i></button>
+      </div>
+      <div class="split-modal-body">
+        <div id="split-rows"></div>
+        <div class="split-remaining-row">
+          <span>Remaining to allocate:</span>
+          <strong id="split-remaining" class="split-remaining-val">₹0.00</strong>
+        </div>
+        <button class="btn outline full-width" id="add-split-row-btn" style="margin-top:12px">
+          <i data-lucide="plus"></i> Add Split
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn primary full-width" id="confirm-split-btn">
+          <i data-lucide="scissors"></i> Confirm Split
+        </button>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
   <script>

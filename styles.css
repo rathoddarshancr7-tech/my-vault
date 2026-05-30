@@ -50,7 +50,7 @@ body {
 button:not([disabled]), .mode-chip, .bill-card,
 .nav-item, .bnav-item, .bnav-fab, .toggle-pw-btn,
 .type-option, .upload-zone, .bill-clip, .tx-delete-btn,
-.topbar-menu-btn, a {
+.tx-edit-btn, .tx-split-btn, .topbar-menu-btn, a {
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Ccircle cx='13' cy='13' r='12' fill='%236366f1'/%3E%3Ctext x='13' y='18' text-anchor='middle' fill='white' font-size='14' font-weight='bold' font-family='Arial,sans-serif'%3E%E2%82%B9%3C/text%3E%3C/svg%3E") 13 13, pointer;
 }
 
@@ -361,9 +361,13 @@ button:not([disabled]), .mode-chip, .bill-card,
   background: rgba(255,255,255,.12); pointer-events: none;
 }
 .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
-.card-spent { background: linear-gradient(135deg, #f43f5e 0%, #ef4444 100%); }
-.card-month { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
-.card-count { background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); }
+.card-spent    { background: linear-gradient(135deg, #f43f5e 0%, #ef4444 100%); }
+.card-month    { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+.card-count    { background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); }
+.card-forecast { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+
+/* 4-column grid on desktop */
+.summary-grid { grid-template-columns: repeat(4, 1fr); }
 .stat-icon {
   width: 48px; height: 48px; border-radius: 12px;
   background: rgba(255,255,255,.22);
@@ -440,13 +444,15 @@ button:not([disabled]), .mode-chip, .bill-card,
 .bill-clip { color: var(--text-3); display: flex; align-items: center; }
 .bill-clip:hover { color: var(--accent); }
 .bill-clip i { width: 14px; height: 14px; }
-.tx-delete-btn {
+.tx-delete-btn, .tx-edit-btn, .tx-split-btn {
   background: none; border: none; color: var(--text-3);
   padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
-  opacity: 1; transition: all var(--transition); min-width: 30px; min-height: 30px;
+  transition: all var(--transition); min-width: 30px; min-height: 30px;
 }
 .tx-delete-btn:hover { background: var(--expense-bg); color: var(--expense); }
-.tx-delete-btn i { width: 14px; height: 14px; }
+.tx-edit-btn:hover   { background: var(--accent-light); color: var(--accent); }
+.tx-split-btn:hover  { background: #fef3c7; color: #d97706; }
+.tx-delete-btn i, .tx-edit-btn i, .tx-split-btn i { width: 14px; height: 14px; }
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center;
@@ -776,6 +782,48 @@ button:not([disabled]), .mode-chip, .bill-card,
 .budget-status.b-red  { color: #b91c1c; }
 .budget-status.b-over { color: #7f1d1d; font-weight: 800; }
 
+/* ── Date Range Filter ───────────────────────────────────────────── */
+.date-range-row {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+}
+.date-range-sep { font-size: 0.85rem; color: var(--text-3); flex-shrink: 0; }
+.date-range-row .filter-select { flex: 1; min-width: 0; }
+
+/* ── Split Modal ─────────────────────────────────────────────────── */
+.split-modal-box { max-width: 540px; }
+.split-modal-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 0; }
+.split-row { margin-bottom: 10px; }
+.split-row-fields {
+  display: grid; grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 8px; align-items: center;
+}
+.split-amount-wrap { position: relative; }
+.split-amount-wrap .input-prefix { z-index: 1; }
+.split-amount-wrap input {
+  width: 100%; padding: 9px 10px 9px 24px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-xs);
+  font-family: 'Outfit', sans-serif; font-size: 0.88rem; color: var(--text-1);
+  background: var(--surface-2); outline: none;
+  transition: border-color var(--transition);
+}
+.split-amount-wrap input:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px rgba(99,102,241,.1); }
+.split-cat-wrap { position: relative; }
+.split-cat-wrap::after { content:'▾'; position:absolute; right:8px; top:50%; transform:translateY(-50%); color:var(--text-3); pointer-events:none; font-size:.75rem; }
+.split-cat-select {
+  width: 100%; padding: 9px 24px 9px 8px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-xs);
+  font-family: 'Outfit', sans-serif; font-size: 0.82rem; color: var(--text-1);
+  background: var(--surface-2); outline: none; appearance: none;
+}
+.split-date-input { padding: 9px 8px !important; font-size: 0.82rem !important; min-height: 40px !important; }
+.split-remaining-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; margin-top: 6px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-xs); font-size: 0.85rem; color: var(--text-2);
+}
+.split-remaining-val { font-weight: 800; font-size: 0.9rem; }
+
 /* ── Bottom Nav ──────────────────────────────────────────────────── */
 .bottom-nav { display: none; }
 
@@ -823,7 +871,7 @@ button:not([disabled]), .mode-chip, .bill-card,
   }
   .sidebar-overlay.hidden { display: none; }
 
-  /* ── Stat cards: horizontal scroll row ── */
+  /* ── Stat cards: horizontal scroll row (4 cards) ── */
   .summary-grid {
     display: flex; overflow-x: auto; scrollbar-width: none;
     gap: 12px; margin-bottom: 18px;
@@ -832,7 +880,7 @@ button:not([disabled]), .mode-chip, .bill-card,
   }
   .summary-grid::-webkit-scrollbar { display: none; }
   .stat-card {
-    min-width: 150px; flex-shrink: 0; flex-grow: 1;
+    min-width: 140px; flex-shrink: 0; flex-grow: 1;
     padding: 16px 14px;
   }
   .stat-icon { width: 40px; height: 40px; border-radius: 10px; }
@@ -897,12 +945,18 @@ button:not([disabled]), .mode-chip, .bill-card,
 
   /* ── Transaction items ── */
   .transaction-item { padding: 13px 14px; }
+  .tx-edit-btn, .tx-split-btn { min-width: 34px; min-height: 34px; padding: 7px; }
   .tx-amount { font-size: 0.9rem; }
   /* Bigger delete tap target */
   .tx-delete-btn { min-width: 36px; min-height: 36px; padding: 8px; }
 
   /* ── Bills ── */
   .bills-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+  /* ── Split modal ── */
+  .split-row-fields { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .split-date-input { grid-column: 1 / -1; }
+  .split-remove-btn { grid-column: -1; grid-row: 1; align-self: start; }
 
   /* ── Modal: slides from bottom on mobile ── */
   .modal-overlay { align-items: flex-end; padding: 0; }
