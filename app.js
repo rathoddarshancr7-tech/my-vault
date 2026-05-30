@@ -21,6 +21,7 @@ let voiceRecognition = null;
 let reminderTimerId  = null;
 let tesseractLoaded  = false;
 let tesseractLoading = false;
+let bowlPeriod       = 'month'; // 'month' | 'all'
 
 // ── DOM ────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -122,13 +123,14 @@ const PAYMENT_MODES = {
   bank:        { label: 'Bank',          color: '#475569', bg: '#f1f5f9' },
 };
 const SECTION_TITLES = {
-  dashboard: 'Dashboard',
-  add:       'Add Transaction',
-  analytics: 'Analytics',
-  history:   'History',
-  calendar:  'Calendar',
-  budget:    'Budget Planner',
-  bills:     'Bills & Receipts',
+  dashboard:  'Dashboard',
+  add:        'Add Transaction',
+  analytics:  'Analytics',
+  history:    'History',
+  calendar:   'Calendar',
+  budget:     'Budget Planner',
+  bills:      'Bills & Receipts',
+  moneybowl:  'Money Bowl',
 };
 
 // ── Encryption ─────────────────────────────────────────────────────
@@ -352,12 +354,13 @@ function showSection(name) {
   topbarTitle.textContent = SECTION_TITLES[name] || name;
   currentSection = name;
 
-  if (name === 'history')   renderHistory();
-  if (name === 'bills')     renderBills();
-  if (name === 'dashboard') updateDashboard();
-  if (name === 'analytics') renderAnalytics();
-  if (name === 'calendar')  renderCalendar();
-  if (name === 'budget')    renderBudget();
+  if (name === 'history')    renderHistory();
+  if (name === 'bills')      renderBills();
+  if (name === 'dashboard')  updateDashboard();
+  if (name === 'analytics')  renderAnalytics();
+  if (name === 'calendar')   renderCalendar();
+  if (name === 'budget')     renderBudget();
+  if (name === 'moneybowl')  renderMoneyBowl();
 
   // Close sidebar on mobile
   closeSidebar();
@@ -456,6 +459,9 @@ function updateDashboard() {
   renderInsights();
   renderSavingsGoal();
   renderRecurringReminder();
+
+  // Refresh money bowl if visible
+  if (currentSection === 'moneybowl') renderMoneyBowl();
 
   lucide.createIcons();
 }
@@ -1872,6 +1878,131 @@ document.addEventListener('keydown', e => {
     closeBillModal(); closeSplitModal();
     closeVoiceOverlay(); closeReminderModal();
   }
+});
+
+// ── Money Bowl ─────────────────────────────────────────────────────
+function renderMoneyBowl() {
+  const now = new Date();
+  const curM = now.getMonth(), curY = now.getFullYear();
+
+  let income = 0, expense = 0;
+  for (const tx of transactions) {
+    const [y, m] = tx.date.split('-').map(Number);
+    const inPeriod = bowlPeriod === 'all' || (y === curY && m - 1 === curM);
+    if (!inPeriod) continue;
+    if (tx.type === 'income')  income  += tx.amount;
+    if (tx.type === 'expense') expense += tx.amount;
+  }
+
+  const remaining = income - expense;
+  const pct = income > 0 ? Math.max(0, Math.min(100, (remaining / income) * 100)) : 0;
+  const overflow = expense > income;
+
+  // ── Liquid level ────────────────────────────────────────────────
+  const liquid = $('bowl-liquid');
+  if (liquid) {
+    liquid.style.height = `${pct}%`;
+
+    // Colour: indigo (full) → amber (mid) → red (low)
+    let liqColor, liqTop, liqBubble;
+    if (pct > 55) {
+      liqColor  = 'linear-gradient(to top, #3730a3, #6366f1 65%, #818cf8)';
+      liqTop    = 'rgba(129,140,248,0.35)';
+      liqBubble = 'rgba(165,180,252,0.25)';
+    } else if (pct > 25) {
+      liqColor  = 'linear-gradient(to top, #b45309, #f59e0b 65%, #fbbf24)';
+      liqTop    = 'rgba(251,191,36,0.35)';
+      liqBubble = 'rgba(253,211,77,0.25)';
+    } else {
+      liqColor  = 'linear-gradient(to top, #991b1b, #ef4444 65%, #f87171)';
+      liqTop    = 'rgba(248,113,113,0.35)';
+      liqBubble = 'rgba(252,165,165,0.25)';
+    }
+    liquid.style.background = liqColor;
+
+    // Wave colour
+    const w1 = liquid.querySelector('.bowl-wave-1');
+    const w2 = liquid.querySelector('.bowl-wave-2');
+    if (w1) w1.style.background = liqTop;
+    if (w2) w2.style.background = liqBubble;
+
+    // Bubble colour
+    liquid.querySelectorAll('.bubble').forEach(b => { b.style.background = liqBubble; });
+  }
+
+  // ── Percentage label ────────────────────────────────────────────
+  const pctEl  = $('bowl-pct-val');
+  const pctSub = $('bowl-pct-sub');
+  if (pctEl) {
+    if (income === 0) {
+      pctEl.textContent = '—';
+      if (pctSub) pctSub.textContent = 'no income';
+    } else if (overflow) {
+      pctEl.textContent = '0%';
+      if (pctSub) pctSub.textContent = 'overspent!';
+    } else {
+      pctEl.textContent = `${Math.round(pct)}%`;
+      if (pctSub) pctSub.textContent = 'remaining';
+    }
+    const pctColor = pct > 55 ? '#818cf8' : pct > 25 ? '#fbbf24' : '#f87171';
+    pctEl.style.color = income > 0 ? pctColor : 'var(--text-3)';
+  }
+
+  // ── Side labels ─────────────────────────────────────────────────
+  const fmt = v => v >= 100000 ? `₹${(v/100000).toFixed(1)}L`
+                 : v >= 1000   ? `₹${(v/1000).toFixed(1)}k`
+                 : `₹${v.toFixed(0)}`;
+  const incLbl = $('bowl-income-label'); if (incLbl) incLbl.textContent = fmt(income);
+  const sptLbl = $('bowl-spent-label');  if (sptLbl) sptLbl.textContent = fmt(expense);
+
+  // ── Stats row ───────────────────────────────────────────────────
+  const si = $('bowl-stat-income');    if (si) si.textContent = `₹${income.toFixed(2)}`;
+  const ss = $('bowl-stat-spent');     if (ss) ss.textContent = `₹${expense.toFixed(2)}`;
+  const sr = $('bowl-stat-remaining');
+  if (sr) {
+    sr.textContent = `${remaining < 0 ? '-' : ''}₹${Math.abs(remaining).toFixed(2)}`;
+    sr.style.color = remaining >= 0 ? '#10b981' : '#ef4444';
+  }
+
+  // ── Overflow warning ────────────────────────────────────────────
+  const ow = $('bowl-overflow-warn');
+  if (ow) ow.classList.toggle('hidden', !overflow);
+
+  // ── No-income hint ──────────────────────────────────────────────
+  const ni = $('bowl-no-income');
+  if (ni) ni.classList.toggle('hidden', income > 0);
+
+  // ── Update filter buttons ────────────────────────────────────────
+  document.querySelectorAll('.bowl-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.period === bowlPeriod);
+  });
+
+  // ── Drip particles on expense change ────────────────────────────
+  spawnBowlDrip();
+}
+
+// Brief drip splash animation when liquid level drops
+let lastBowlPct = null;
+function spawnBowlDrip() {
+  const liquid = $('bowl-liquid');
+  if (!liquid) return;
+  const curPct = parseFloat(liquid.style.height) || 0;
+  if (lastBowlPct !== null && curPct < lastBowlPct) {
+    const drip = document.createElement('div');
+    drip.className = 'bowl-drip-particle';
+    liquid.appendChild(drip);
+    setTimeout(() => drip.remove(), 900);
+  }
+  lastBowlPct = curPct;
+}
+
+// Bowl filter click
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.bowl-filter-btn');
+  if (!btn) return;
+  bowlPeriod = btn.dataset.period;
+  lastBowlPct = null; // reset drip tracker so we don't falsely trigger
+  renderMoneyBowl();
 });
 
 // ── Voice Input ────────────────────────────────────────────────────
