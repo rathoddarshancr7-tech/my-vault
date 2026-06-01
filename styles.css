@@ -622,6 +622,13 @@ button:not([disabled]), .mode-chip, .bill-card,
 .mode-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
 .mode-chip.active { background: var(--grad-primary); color: #fff; border-color: transparent; box-shadow: 0 4px 12px rgba(99,102,241,.35); }
 
+/* Payment logo chips */
+.mode-chip-logo { padding: 4px 10px; }
+.pay-logo { width: auto; height: 22px; display: block; border-radius: 3px; }
+.mode-chip-logo:hover .pay-logo,
+.mode-chip-logo.active .pay-logo { filter: brightness(1.1) saturate(1.1); }
+.mode-chip-logo.active { background: transparent; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,.25); }
+
 /* Upload zone */
 .upload-zone {
   border: 2px dashed var(--border); border-radius: var(--radius-sm);

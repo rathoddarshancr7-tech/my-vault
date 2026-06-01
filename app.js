@@ -417,7 +417,7 @@ function updateDashboard() {
   $('total-income').textContent = `₹${totalIncome.toFixed(2)}`;
   const netEl = $('net-savings');
   netEl.textContent = `${net >= 0 ? '' : '-'}₹${Math.abs(net).toFixed(2)}`;
-  netEl.style.color = net >= 0 ? '#fff' : '#fca5a5';
+  netEl.style.color = net >= 0 ? '#059669' : '#ef4444';
 
   // ── Month forecast ────────────────────────────────────────────────
   const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
@@ -2052,48 +2052,63 @@ function initVoiceInput() {
   voiceRecognition.lang = 'en-IN';
   voiceRecognition.continuous = false;
   voiceRecognition.interimResults = true;
-  voiceRecognition.maxAlternatives = 1;
+  voiceRecognition.maxAlternatives = 3;
 
   voiceRecognition.onresult = e => {
-    let transcript = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      transcript += e.results[i][0].transcript;
-    }
+    // Always build from all results (not from resultIndex) to avoid accumulation glitches
+    let transcript = Array.from(e.results).map(r => r[0].transcript).join(' ').trim();
     const el = $('voice-transcript');
     if (el) el.textContent = transcript;
+    // Only process on final result
     if (e.results[e.results.length - 1].isFinal) {
-      processVoiceTranscript(transcript.trim());
+      processVoiceTranscript(transcript);
     }
   };
   voiceRecognition.onerror = e => {
     const st = $('voice-status');
-    if (st) st.textContent = `Couldn't hear. Tap mic to retry.`;
+    if (st) st.textContent = `Couldn't hear. Tap mic and try again.`;
     $('voice-mic-btn')?.classList.remove('listening');
   };
   voiceRecognition.onend = () => {
     $('voice-mic-btn')?.classList.remove('listening');
+    // Only fall back if onresult never fired (e.g. no speech detected)
     const t = $('voice-transcript')?.textContent?.trim();
-    if (t && !$('voice-parsed-wrap')?.children.length) {
+    const alreadyParsed = ($('voice-parsed-wrap')?.children.length || 0) > 0;
+    if (t && !alreadyParsed) {
       processVoiceTranscript(t);
     }
   };
 }
 
-function parseVoiceTransaction(text) {
+function parseVoiceTransaction(rawText) {
+  // ── Pre-process STT output ──────────────────────────────────────
+  // Fix common STT glitch: digits glued to prepositions, e.g. "500for" → "500 for"
+  //                         "5004 food" when user said "500 for food" (STT heard "four")
+  let text = rawText
+    .replace(/(\d+)(for|from|at|on|into|in|and)\b/gi, '$1 $2') // "500for" → "500 for"
+    .replace(/\b(\d{3,})4\b(?=\s+\w)/g, (_, n) => n)           // "5004 food" → "500 food" (trailing "4" before a word = "for")
+    .trim();
+
   const lower = text.toLowerCase();
   const result = { amount: null, category: null, payee: null, mode: null };
 
-  // Amount: numbers like 500, ₹500, 1,500, 500 rupees
-  const amtMatch = text.match(/₹?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:rs|rupees?)?/i);
-  if (amtMatch) result.amount = parseFloat(amtMatch[1].replace(/,/g, ''));
+  // Amount detection — priority order:
+  // 1. ₹-prefixed (most explicit)
+  let amtMatch = text.match(/₹\s*([\d,]+(?:\.\d{1,2})?)/);
+  // 2. rs/rupees suffixed
+  if (!amtMatch) amtMatch = text.match(/\b([\d,]+(?:\.\d{1,2})?)\s*(?:rs\.?|rupees?)\b/i);
+  // 3. Standalone number with word boundaries (no adjacent digits)
+  if (!amtMatch) amtMatch = text.match(/(?<![.\d])\b(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\b(?![.\d])/);
+  if (amtMatch) result.amount = parseFloat((amtMatch[1] || amtMatch[0]).replace(/,/g, ''));
 
-  // Word numbers fallback
+  // Word numbers fallback (if no digit found)
   if (!result.amount) {
     const wordNums = {
-      'one hundred':100,'two hundred':200,'three hundred':300,'four hundred':400,
-      'five hundred':500,'six hundred':600,'seven hundred':700,'eight hundred':800,
-      'nine hundred':900,'one thousand':1000,'two thousand':2000,'three thousand':3000,
-      'five thousand':5000,'ten thousand':10000
+      'ten thousand':10000,'five thousand':5000,'three thousand':3000,
+      'two thousand':2000,'one thousand':1000,'thousand':1000,
+      'nine hundred':900,'eight hundred':800,'seven hundred':700,
+      'six hundred':600,'five hundred':500,'four hundred':400,
+      'three hundred':300,'two hundred':200,'one hundred':100,'hundred':100,
     };
     for (const [w, v] of Object.entries(wordNums)) {
       if (lower.includes(w)) { result.amount = v; break; }
@@ -2249,15 +2264,26 @@ function scheduleNextReminder(timeStr) {
   }, delay);
 }
 
-function fireReminder() {
+async function fireReminder() {
   if (Notification.permission !== 'granted') return;
-  try {
-    new Notification('My Vault 💸', {
-      body: "Don't forget to log today's expenses!",
-      icon: './icon.svg',
-      tag: 'daily-reminder',
-    });
-  } catch(e) {}
+  const opts = {
+    body: "Don't forget to log today's expenses! 💸",
+    icon: './icon.svg',
+    badge: './icon.svg',
+    tag: 'daily-reminder',
+    renotify: true,
+    requireInteraction: false,
+  };
+  // Prefer Service Worker notification (required on mobile/PWA)
+  if ('serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification('My Vault', opts);
+      return;
+    } catch(e) { /* fall through */ }
+  }
+  // Desktop fallback
+  try { new Notification('My Vault', opts); } catch(e) {}
 }
 
 async function enableReminder(timeStr) {
@@ -2268,6 +2294,8 @@ async function enableReminder(timeStr) {
   }
   saveReminderSettings({ enabled: true, time: timeStr });
   scheduleNextReminder(timeStr);
+  // Immediate test notification so user confirms it works
+  setTimeout(() => fireReminder(), 500);
   // Register Periodic Background Sync for installed PWA on Android
   if ('serviceWorker' in navigator) {
     try {
@@ -2303,7 +2331,19 @@ function openReminderModal() {
   const s = getReminderSettings();
   $('reminder-time-input').value = s?.time || '20:00';
   const isOn = s?.enabled || false;
-  $('reminder-status-text').textContent = isOn ? '🔔 Reminder is ON' : '🔕 Reminder is off';
+  const permStr = !('Notification' in window) ? ' (not supported)' :
+                  Notification.permission === 'granted' ? '' :
+                  Notification.permission === 'denied'  ? ' — notifications BLOCKED in browser' :
+                  ' — permission not yet granted';
+  if (isOn) {
+    const [h,m] = (s.time||'20:00').split(':');
+    const d = new Date(); d.setHours(+h,+m,0,0);
+    if (d <= new Date()) d.setDate(d.getDate()+1);
+    const label = d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    $('reminder-status-text').textContent = `🔔 Next: ${label}${permStr}`;
+  } else {
+    $('reminder-status-text').textContent = `🔕 Reminder is off${permStr}`;
+  }
   $('reminder-enable-btn').textContent = isOn ? 'Update Time' : 'Enable';
   $('reminder-disable-btn').classList.toggle('hidden', !isOn);
   $('reminder-modal').classList.remove('hidden');
