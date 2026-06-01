@@ -425,7 +425,7 @@ function updateDashboard() {
   const dailyAvg    = dayOfMonth > 0 ? monthExpense / dayOfMonth : 0;
   $('forecast-amount').textContent = `₹${(dailyAvg * daysInMonth).toFixed(2)}`;
 
-  // ── Today's spend gadget ──────────────────────────────────────────
+  // ── Today's spend ─────────────────────────────────────────────────
   const todayStr  = now.toISOString().slice(0, 10);
   let todaySpend = 0, todayCount = 0;
   const todayCats = new Set();
@@ -436,13 +436,65 @@ function updateDashboard() {
       todayCats.add(tx.category);
     }
   }
-  $('today-amount').textContent = `₹${todaySpend.toFixed(2)}`;
-  $('today-meta').textContent   = todayCount === 0
-    ? 'No transactions today'
-    : `${todayCount} transaction${todayCount !== 1 ? 's' : ''} · ${todayCats.size} categor${todayCats.size !== 1 ? 'ies' : 'y'}`;
   const dayName  = now.toLocaleDateString('en-IN', { weekday: 'short' });
   const monthStr = now.toLocaleDateString('en-IN', { month: 'short' });
   $('today-date').textContent = `${dayName}, ${now.getDate()} ${monthStr}`;
+
+  // ── Hero card ─────────────────────────────────────────────────────
+  const heroBalance  = totalIncome - expense;
+  const moneyLeft    = totalIncome - monthExpense;
+  const savingsRate  = totalIncome > 0 ? Math.round(((totalIncome - expense) / totalIncome) * 100) : 0;
+  const forecastAmt  = dailyAvg * daysInMonth;
+
+  const heroBalEl = $('hero-balance');
+  if (heroBalEl) {
+    heroBalEl.textContent = `${heroBalance >= 0 ? '' : '-'}₹${Math.abs(heroBalance).toFixed(2)}`;
+  }
+  if ($('hero-monthly-income'))  $('hero-monthly-income').textContent  = `₹${totalIncome.toFixed(0)}`;
+  if ($('hero-monthly-expense')) $('hero-monthly-expense').textContent = `₹${monthExpense.toFixed(0)}`;
+  const mlEl = $('hero-money-left');
+  if (mlEl) {
+    mlEl.textContent = `${moneyLeft >= 0 ? '' : '-'}₹${Math.abs(moneyLeft).toFixed(0)}`;
+    mlEl.style.color = moneyLeft >= 0 ? 'rgba(255,255,255,.9)' : '#fca5a5';
+  }
+  if ($('hero-savings-rate')) $('hero-savings-rate').textContent = `${savingsRate}%`;
+
+  // Hero insight text
+  const insightEl = $('hero-insight-text');
+  if (insightEl) {
+    if (transactions.length === 0) {
+      insightEl.textContent = 'Add your first transaction to see insights here.';
+    } else if (savingsRate >= 30) {
+      insightEl.textContent = `🟢 Great job! You're saving ${savingsRate}% of your income this month.`;
+    } else if (savingsRate >= 10) {
+      insightEl.textContent = `🟡 You're saving ${savingsRate}% — try to push past 20% this month.`;
+    } else if (totalIncome === 0) {
+      insightEl.textContent = `💡 Add income entries to see your savings rate.`;
+    } else {
+      insightEl.textContent = `🔴 Savings rate is ${savingsRate}%. Review your top spending categories.`;
+    }
+  }
+
+  // ── Marquee values ────────────────────────────────────────────────
+  const mqPairs = [
+    ['mq-today',    `₹${todaySpend.toFixed(2)}`],
+    ['mq-month',    `₹${monthExpense.toFixed(2)}`],
+    ['mq-income',   `₹${totalIncome.toFixed(2)}`],
+    ['mq-savings',  `${heroBalance >= 0 ? '' : '-'}₹${Math.abs(heroBalance).toFixed(2)}`],
+    ['mq-forecast', `₹${forecastAmt.toFixed(2)}`],
+    ['mq-count',    String(transactions.length)],
+    ['mq-today2',    `₹${todaySpend.toFixed(2)}`],
+    ['mq-month2',    `₹${monthExpense.toFixed(2)}`],
+    ['mq-income2',   `₹${totalIncome.toFixed(2)}`],
+    ['mq-savings2',  `${heroBalance >= 0 ? '' : '-'}₹${Math.abs(heroBalance).toFixed(2)}`],
+    ['mq-forecast2', `₹${forecastAmt.toFixed(2)}`],
+    ['mq-count2',    String(transactions.length)],
+  ];
+  for (const [id, val] of mqPairs) { const el = $(id); if (el) el.textContent = val; }
+  // Color net savings marquee
+  ['mq-savings','mq-savings2'].forEach(id => {
+    const el = $(id); if (el) el.className = `m-val ${heroBalance >= 0 ? 'up' : 'down'}`;
+  });
 
   // Recent 5
   const recent = [...transactions].sort((a,b) => new Date(b.date)-new Date(a.date)).slice(0,5);
@@ -1834,11 +1886,25 @@ $('cal-detail-close').addEventListener('click', () => $('cal-day-detail').classL
 $('budget-edit-btn').addEventListener('click', openBudgetEdit);
 $('budget-save-btn').addEventListener('click', saveBudgets);
 
-// Nav items (sidebar + bottom nav)
+// Nav items (sidebar + bottom nav + dock)
 document.addEventListener('click', e => {
-  const item = e.target.closest('.nav-item[data-section], .bnav-item[data-section], .bnav-fab[data-section]');
+  const item = e.target.closest('.nav-item[data-section], .bnav-item[data-section], .bnav-fab[data-section], .dock-btn[data-section], .hero-action-btn[data-section]');
   if (item) showSection(item.dataset.section);
 });
+
+// Hero "Add Income" + dock "Add Income" — navigate to add form pre-set to income
+function goAddIncome() {
+  showSection('add');
+  $('tx-type').value = 'income';
+  $('type-toggle').querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  $('type-toggle').querySelector('[data-type="income"]')?.classList.add('active');
+  categoryGroup.classList.add('hidden'); categorySelect.required = false;
+  payeeGroup.classList.remove('hidden');
+}
+const heroIncomeBtn = $('hero-add-income-btn');
+if (heroIncomeBtn) heroIncomeBtn.addEventListener('click', goAddIncome);
+const dockIncomeBtn = $('dock-add-income-btn');
+if (dockIncomeBtn) dockIncomeBtn.addEventListener('click', goAddIncome);
 
 // Cancel edit
 $('cancel-edit-btn').addEventListener('click', () => {

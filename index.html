@@ -216,16 +216,60 @@
             <button id="dismiss-recurring-btn" class="btn ghost icon-btn"><i data-lucide="x"></i></button>
           </div>
 
-          <!-- Today's Spend Gadget -->
-          <div class="today-widget">
-            <div class="today-widget-left">
-              <div class="today-widget-label">Today's Spend</div>
-              <div class="today-widget-amount" id="today-amount">₹0.00</div>
-              <div class="today-widget-meta" id="today-meta">No transactions today</div>
+          <!-- Hero Dashboard Card -->
+          <div class="hero-card">
+            <div class="hero-card-top">
+              <div>
+                <div class="hero-label">Available Balance</div>
+                <div class="hero-balance" id="hero-balance">₹0.00</div>
+              </div>
+              <div class="hero-badge" id="today-date">—</div>
             </div>
-            <div class="today-widget-right">
-              <div class="today-widget-date" id="today-date">—</div>
-              <div class="today-widget-icon"><i data-lucide="zap"></i></div>
+            <div class="hero-kpi-row">
+              <div class="hero-kpi">
+                <div class="hero-kpi-label">Income</div>
+                <div class="hero-kpi-value income-val" id="hero-monthly-income">₹0</div>
+              </div>
+              <div class="hero-kpi">
+                <div class="hero-kpi-label">Expenses</div>
+                <div class="hero-kpi-value expense-val" id="hero-monthly-expense">₹0</div>
+              </div>
+              <div class="hero-kpi">
+                <div class="hero-kpi-label">Money Left</div>
+                <div class="hero-kpi-value" id="hero-money-left">₹0</div>
+              </div>
+              <div class="hero-kpi">
+                <div class="hero-kpi-label">Savings Rate</div>
+                <div class="hero-kpi-value savings-val" id="hero-savings-rate">0%</div>
+              </div>
+            </div>
+            <div class="hero-insight" id="hero-insight-text">Track your spending to unlock smart insights.</div>
+            <div class="hero-actions">
+              <button class="hero-action-btn primary" data-section="add" id="hero-add-expense-btn">
+                <i data-lucide="plus"></i> Add Expense
+              </button>
+              <button class="hero-action-btn secondary" id="hero-add-income-btn">
+                <i data-lucide="arrow-down-circle"></i> Add Income
+              </button>
+            </div>
+          </div>
+
+          <!-- Financial Marquee -->
+          <div class="marquee-wrap">
+            <div class="marquee-track" id="marquee-track">
+              <span class="marquee-item"><span class="m-label">Today</span><span class="m-val" id="mq-today">₹0.00</span></span>
+              <span class="marquee-item"><span class="m-label">This Month</span><span class="m-val" id="mq-month">₹0.00</span></span>
+              <span class="marquee-item"><span class="m-label">Total Income</span><span class="m-val up" id="mq-income">₹0.00</span></span>
+              <span class="marquee-item"><span class="m-label">Net Savings</span><span class="m-val" id="mq-savings">₹0.00</span></span>
+              <span class="marquee-item"><span class="m-label">Forecast</span><span class="m-val" id="mq-forecast">₹0.00</span></span>
+              <span class="marquee-item"><span class="m-label">Transactions</span><span class="m-val" id="mq-count">0</span></span>
+              <!-- duplicate set for seamless loop -->
+              <span class="marquee-item"><span class="m-label">Today</span><span class="m-val" id="mq-today2">₹0.00</span></span>
+              <span class="marquee-item"><span class="m-label">This Month</span><span class="m-val" id="mq-month2">₹0.00</span></span>
+              <span class="marquee-item"><span class="m-label">Total Income</span><span class="m-val up" id="mq-income2">₹0.00</span></span>
+              <span class="marquee-item"><span class="m-label">Net Savings</span><span class="m-val" id="mq-savings2">₹0.00</span></span>
+              <span class="marquee-item"><span class="m-label">Forecast</span><span class="m-val" id="mq-forecast2">₹0.00</span></span>
+              <span class="marquee-item"><span class="m-label">Transactions</span><span class="m-val" id="mq-count2">0</span></span>
             </div>
           </div>
 
@@ -828,6 +872,33 @@
       </nav>
 
     </div><!-- /main-wrapper -->
+
+    <!-- Floating Quick-Action Dock (desktop) -->
+    <div class="floating-dock" id="floating-dock">
+      <button class="dock-btn" data-section="dashboard">
+        <i data-lucide="layout-dashboard"></i>
+        <span>Home</span>
+      </button>
+      <div class="dock-divider"></div>
+      <button class="dock-btn dock-primary" data-section="add" id="dock-add-expense-btn">
+        <i data-lucide="plus"></i>
+        <span>Expense</span>
+      </button>
+      <button class="dock-btn" id="dock-add-income-btn">
+        <i data-lucide="arrow-down-circle"></i>
+        <span>Income</span>
+      </button>
+      <div class="dock-divider"></div>
+      <button class="dock-btn" data-section="analytics">
+        <i data-lucide="bar-chart-2"></i>
+        <span>Analytics</span>
+      </button>
+      <button class="dock-btn" data-section="budget">
+        <i data-lucide="target"></i>
+        <span>Budget</span>
+      </button>
+    </div>
+
   </div><!-- /app-shell -->
 
   <!-- Split Transaction Modal -->
