@@ -21,7 +21,6 @@ let voiceRecognition = null;
 let reminderTimerId  = null;
 let tesseractLoaded  = false;
 let tesseractLoading = false;
-let bowlPeriod       = 'month'; // 'month' | 'all'
 
 // ── DOM ────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -108,10 +107,15 @@ const CATEGORY_COLORS = {
   'Shopping':      '#ec4899',
   'Miscellaneous': '#6b7280',
   'Lending Money': '#ef4444',
+  'Lunch':         '#e11d48',
+  'Transfer':      '#0ea5e9',
+  'Bills':         '#a855f7',
+  'Entertainment': '#f43f5e',
 };
 const CATEGORY_EMOJI = {
   'Food':'🍔','Travel':'✈️','Rent':'🏠','Electricity':'⚡',
   'Grocery':'🛒','Shopping':'🛍️','Miscellaneous':'📦','Lending Money':'💸',
+  'Lunch':'🍽️','Transfer':'💳','Bills':'📄','Entertainment':'🎭',
 };
 const PAYMENT_MODES = {
   cash:        { label: 'Cash',          color: '#059669', bg: '#ecfdf5' },
@@ -130,7 +134,7 @@ const SECTION_TITLES = {
   calendar:   'Calendar',
   budget:     'Budget Planner',
   bills:      'Bills & Receipts',
-  moneybowl:  'Money Bowl',
+  import:     'Import from Paytm',
 };
 
 // ── Encryption ─────────────────────────────────────────────────────
@@ -360,7 +364,6 @@ function showSection(name) {
   if (name === 'analytics')  renderAnalytics();
   if (name === 'calendar')   renderCalendar();
   if (name === 'budget')     renderBudget();
-  if (name === 'moneybowl')  renderMoneyBowl();
 
   // Close sidebar on mobile
   closeSidebar();
@@ -459,19 +462,50 @@ function updateDashboard() {
   }
   if ($('hero-savings-rate')) $('hero-savings-rate').textContent = `${savingsRate}%`;
 
-  // Hero insight text
+  // Hero insight text — specific, data-driven
   const insightEl = $('hero-insight-text');
   if (insightEl) {
+    const topCat = Object.entries(catTotals).sort((a,b) => b[1]-a[1])[0];
     if (transactions.length === 0) {
-      insightEl.textContent = 'Add your first transaction to see insights here.';
-    } else if (savingsRate >= 30) {
-      insightEl.textContent = `🟢 Great job! You're saving ${savingsRate}% of your income this month.`;
-    } else if (savingsRate >= 10) {
-      insightEl.textContent = `🟡 You're saving ${savingsRate}% — try to push past 20% this month.`;
+      insightEl.textContent = 'Tap + to log your first expense.';
+    } else if (todaySpend > 0) {
+      insightEl.textContent = `Today: ₹${todaySpend.toFixed(0)} across ${todayCount} payment${todayCount>1?'s':''}${topCat ? ` · top: ${topCat[0]}` : ''}.`;
+    } else if (topCat && monthExpense > 0) {
+      const pct = Math.round((topCat[1] / monthExpense) * 100);
+      insightEl.textContent = `This month's top spend: ${CATEGORY_EMOJI[topCat[0]]||'📦'} ${topCat[0]} (₹${topCat[1].toFixed(0)}, ${pct}% of total).`;
     } else if (totalIncome === 0) {
-      insightEl.textContent = `💡 Add income entries to see your savings rate.`;
+      insightEl.textContent = `Add income entries to track your savings rate.`;
+    } else if (savingsRate >= 30) {
+      insightEl.textContent = `Saving ${savingsRate}% of income — on track.`;
     } else {
-      insightEl.textContent = `🔴 Savings rate is ${savingsRate}%. Review your top spending categories.`;
+      insightEl.textContent = `Savings rate ${savingsRate}%. Daily avg ₹${dailyAvg.toFixed(0)} · forecasting ₹${(dailyAvg*daysInMonth).toFixed(0)} this month.`;
+    }
+  }
+
+  // Budget overview on dashboard
+  const dashBudgetCard = $('dash-budget-card');
+  const dashBudgetList = $('dash-budget-list');
+  if (dashBudgetCard && dashBudgetList) {
+    const budgetCats = Object.entries(budgets).filter(([,limit]) => limit > 0);
+    if (budgetCats.length) {
+      dashBudgetCard.classList.remove('hidden');
+      dashBudgetList.innerHTML = budgetCats.map(([cat, limit]) => {
+        const spent  = catTotals[cat] || 0;
+        const pct    = Math.min(100, Math.round((spent / limit) * 100));
+        const over   = spent > limit;
+        const color  = over ? '#ef4444' : pct > 75 ? '#f59e0b' : '#10b981';
+        return `<div class="dash-budget-item">
+          <div class="dash-budget-row">
+            <span class="dash-budget-name">${CATEGORY_EMOJI[cat]||'📦'} ${cat}</span>
+            <span class="dash-budget-nums" style="color:${over?'#ef4444':'var(--text-2)'}">₹${spent.toFixed(0)} / ₹${limit.toFixed(0)}</span>
+          </div>
+          <div class="dash-budget-track">
+            <div class="dash-budget-fill" style="width:${pct}%;background:${color}"></div>
+          </div>
+        </div>`;
+      }).join('');
+    } else {
+      dashBudgetCard.classList.add('hidden');
     }
   }
 
@@ -512,8 +546,6 @@ function updateDashboard() {
   renderSavingsGoal();
   renderRecurringReminder();
 
-  // Refresh money bowl if visible
-  if (currentSection === 'moneybowl') renderMoneyBowl();
 
   lucide.createIcons();
 }
@@ -584,30 +616,34 @@ function createTxItem(tx, showDelete = true) {
   div.dataset.id = tx.id;
   const checked = bulkSelected.has(tx.id);
   div.innerHTML = `
-    <div class="tx-left">
-      ${bulkMode && showDelete ? `<input type="checkbox" class="bulk-checkbox" data-id="${tx.id}" ${checked?'checked':''}
-         style="margin-right:8px;width:18px;height:18px;accent-color:var(--accent);flex-shrink:0">` : ''}
-      <div class="tx-emoji" style="background:${color}18;color:${color}">${emoji}</div>
-      <div class="tx-info">
-        <span class="tx-cat">${escapeHtml(label)}</span>
-        <div class="tx-meta">
-          ${tx.payee  ? `<span class="tx-payee">→ ${escapeHtml(tx.payee)}</span>` : ''}
-          ${tx.note   ? `<span class="tx-note">${escapeHtml(tx.note)}</span>` : ''}
-          ${modeBadgeHtml(tx.paymentMode)}
-          ${tx.recurring ? `<span class="mode-badge" style="color:#8b5cf6;background:#f5f3ff">🔁</span>` : ''}
+    <div class="tx-delete-reveal">🗑 Delete</div>
+    <div class="tx-swipe-inner">
+      <div class="tx-left">
+        ${bulkMode && showDelete ? `<input type="checkbox" class="bulk-checkbox" data-id="${tx.id}" ${checked?'checked':''}
+           style="margin-right:8px;width:18px;height:18px;accent-color:var(--accent);flex-shrink:0">` : ''}
+        <div class="tx-emoji" style="background:${color}18;color:${color}">${emoji}</div>
+        <div class="tx-info">
+          <span class="tx-cat">${escapeHtml(label)}</span>
+          <div class="tx-meta">
+            ${tx.payee  ? `<span class="tx-payee">→ ${escapeHtml(tx.payee)}</span>` : ''}
+            ${tx.note   ? `<span class="tx-note">${escapeHtml(tx.note)}</span>` : ''}
+            ${modeBadgeHtml(tx.paymentMode)}
+            ${tx.recurring ? `<span class="mode-badge" style="color:#8b5cf6;background:#f5f3ff">🔁</span>` : ''}
+          </div>
+          <span class="tx-date">${formatDate(tx.date)}</span>
         </div>
-        <span class="tx-date">${formatDate(tx.date)}</span>
       </div>
-    </div>
-    <div class="tx-right">
-      <span class="tx-amount ${tx.type}">${sign}₹${tx.amount.toFixed(2)}</span>
-      ${tx.bill ? `<span class="bill-clip" data-id="${tx.id}" title="View receipt"><i data-lucide="paperclip"></i></span>` : ''}
-      ${showDelete && !bulkMode ? `
-        <button class="tx-edit-btn" data-id="${tx.id}" title="Edit"><i data-lucide="pencil"></i></button>
-        <button class="tx-split-btn" data-id="${tx.id}" title="Split"><i data-lucide="scissors"></i></button>
-        <button class="tx-delete-btn" data-id="${tx.id}" title="Delete"><i data-lucide="trash-2"></i></button>
-      ` : ''}
+      <div class="tx-right">
+        <span class="tx-amount ${tx.type}">${sign}₹${tx.amount.toFixed(2)}</span>
+        ${tx.bill ? `<span class="bill-clip" data-id="${tx.id}" title="View receipt"><i data-lucide="paperclip"></i></span>` : ''}
+        ${showDelete && !bulkMode ? `
+          <button class="tx-edit-btn" data-id="${tx.id}" title="Edit"><i data-lucide="pencil"></i></button>
+          <button class="tx-split-btn" data-id="${tx.id}" title="Split"><i data-lucide="scissors"></i></button>
+          <button class="tx-delete-btn" data-id="${tx.id}" title="Delete"><i data-lucide="trash-2"></i></button>
+        ` : ''}
+      </div>
     </div>`;
+  if (showDelete && !bulkMode) attachSwipeDelete(div, tx.id);
   return div;
 }
 
@@ -1814,8 +1850,14 @@ togglePwBtn.addEventListener('click', () => {
 });
 
 lockBtn.addEventListener('click', lockVault);
-exportBtn.addEventListener('click', exportPDF);
+exportBtn.addEventListener('click', () => { closeSidebar(); exportPDF(); });
 $('export-csv-btn')?.addEventListener('click', () => { closeSidebar(); exportCSV(); });
+$('export-toggle-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  const sub = $('export-submenu');
+  sub.classList.toggle('hidden');
+  $('export-toggle-btn').classList.toggle('export-open');
+});
 $('dark-mode-btn')?.addEventListener('click', toggleDarkMode);
 $('backup-btn')?.addEventListener('click', exportBackup);
 $('restore-btn')?.addEventListener('click', () => { closeSidebar(); $('restore-file-input').click(); });
@@ -1869,6 +1911,165 @@ menuBtn.addEventListener('click', openSidebar);
 sidebarOverlay.addEventListener('click', closeSidebar);
 sidebarCloseBtn.addEventListener('click', closeSidebar);
 bnavMenu.addEventListener('click', openSidebar);
+
+// Close sidebar when clicking anywhere on the content area
+document.querySelector('.content-area')?.addEventListener('click', () => {
+  if (sidebar.classList.contains('open')) closeSidebar();
+});
+
+// ── Quick-Add Bottom Sheet ─────────────────────────────────────────
+const qasBackdrop = $('qas-backdrop');
+const qasSheet    = $('qas-sheet');
+let qasType = 'expense';
+let qasCat  = 'Food';
+
+function openQuickAdd(type = 'expense') {
+  qasType = type;
+  $('qas-date').value = new Date().toISOString().slice(0, 10);
+  $('qas-amount').value = '';
+  $('qas-note').value = '';
+  qasBackdrop.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    qasBackdrop.classList.add('visible');
+    qasSheet.classList.add('open');
+    qasSheet.setAttribute('aria-hidden', 'false');
+  });
+  qasSheet.querySelectorAll('.qas-type-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.qtype === type));
+  buildQasCatGrid();
+  setTimeout(() => $('qas-amount').focus(), 350);
+}
+
+function closeQuickAdd() {
+  qasBackdrop.classList.remove('visible');
+  qasSheet.classList.remove('open');
+  qasSheet.setAttribute('aria-hidden', 'true');
+  setTimeout(() => qasBackdrop.classList.add('hidden'), 260);
+}
+
+function buildQasCatGrid() {
+  const grid = $('qas-cat-grid');
+  if (!grid) return;
+  const cats = Object.keys(CATEGORY_EMOJI);
+  grid.innerHTML = cats.map(c => `
+    <button class="qas-cat-chip${c === qasCat ? ' active' : ''}" data-cat="${c}">
+      ${CATEGORY_EMOJI[c]} ${c}
+    </button>`).join('');
+  grid.querySelectorAll('.qas-cat-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      qasCat = btn.dataset.cat;
+      grid.querySelectorAll('.qas-cat-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+}
+
+qasBackdrop?.addEventListener('click', closeQuickAdd);
+$('qas-close-btn')?.addEventListener('click', closeQuickAdd);
+
+qasSheet?.querySelectorAll('.qas-type-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    qasType = btn.dataset.qtype;
+    qasSheet.querySelectorAll('.qas-type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    $('qas-cat-grid').style.display = qasType === 'income' ? 'none' : 'flex';
+    qasSheet.querySelector('.qas-field-label').style.display = qasType === 'income' ? 'none' : '';
+  });
+});
+
+$('qas-submit-btn')?.addEventListener('click', async () => {
+  const amount = parseFloat($('qas-amount').value);
+  const date   = $('qas-date').value;
+  if (!amount || amount <= 0 || !date) {
+    $('qas-amount').focus(); return;
+  }
+  const tx = {
+    id: crypto.randomUUID(),
+    type: qasType,
+    amount,
+    date,
+    category: qasType === 'expense' ? qasCat : null,
+    paymentMode: 'cash',
+  };
+  const note = $('qas-note').value.trim();
+  if (note) tx.note = note;
+  transactions.push(tx);
+  transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+  await saveData();
+  updateDashboard();
+  if (currentSection === 'history') renderHistory();
+  showToast('Transaction added!');
+  closeQuickAdd();
+});
+
+$('bnav-fab-btn')?.addEventListener('click', () => openQuickAdd('expense'));
+
+// ── Swipe-to-delete ────────────────────────────────────────────────
+function attachSwipeDelete(el, id) {
+  let startX = 0, curX = 0, swiping = false;
+  const inner = el.querySelector('.tx-swipe-inner');
+  const reveal = el.querySelector('.tx-delete-reveal');
+  if (!inner) return;
+
+  el.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX; curX = 0; swiping = true;
+  }, { passive: true });
+
+  el.addEventListener('touchmove', e => {
+    if (!swiping) return;
+    const dx = e.touches[0].clientX - startX;
+    if (dx >= 0) { inner.style.transform = ''; return; }
+    curX = Math.max(dx, -90);
+    inner.style.transition = 'none';
+    inner.style.transform = `translateX(${curX}px)`;
+    reveal.classList.toggle('visible', curX < -40);
+  }, { passive: true });
+
+  el.addEventListener('touchend', () => {
+    swiping = false;
+    inner.style.transition = '';
+    if (curX < -60) {
+      inner.style.transform = 'translateX(-90px)';
+      setTimeout(() => { handleDeleteWithUndo(id); }, 200);
+    } else {
+      inner.style.transform = '';
+      reveal.classList.remove('visible');
+    }
+  });
+}
+
+// ── Pull-to-refresh on history ─────────────────────────────────────
+(function initPTR() {
+  const histSection = $('section-history');
+  if (!histSection) return;
+  let startY = 0, pulling = false;
+  const indicator = $('ptr-indicator');
+
+  histSection.addEventListener('touchstart', e => {
+    if (histSection.scrollTop === 0) { startY = e.touches[0].clientY; pulling = true; }
+  }, { passive: true });
+
+  histSection.addEventListener('touchmove', e => {
+    if (!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 50 && indicator) indicator.classList.remove('hidden');
+  }, { passive: true });
+
+  histSection.addEventListener('touchend', e => {
+    if (!pulling) return;
+    pulling = false;
+    const dy = e.changedTouches[0].clientY - startY;
+    if (dy > 50) {
+      if (indicator) indicator.querySelector('.ptr-spin').classList.add('spinning');
+      setTimeout(() => {
+        renderHistory();
+        if (indicator) { indicator.classList.add('hidden'); indicator.querySelector('.ptr-spin').classList.remove('spinning'); }
+      }, 600);
+    } else {
+      if (indicator) indicator.classList.add('hidden');
+    }
+  });
+})();
 
 topbarAddBtn.addEventListener('click', () => showSection('add'));
 dismissBtn.addEventListener('click', () => weeklyReminder.classList.add('hidden'));
@@ -1947,102 +2148,6 @@ document.addEventListener('keydown', e => {
 });
 
 // ── Money Bowl (Luxury Vault Jar) ──────────────────────────────────
-function renderMoneyBowl() {
-  const now = new Date();
-  const curM = now.getMonth(), curY = now.getFullYear();
-
-  let income = 0, expense = 0;
-  for (const tx of transactions) {
-    const [y, m] = tx.date.split('-').map(Number);
-    const inPeriod = bowlPeriod === 'all' || (y === curY && m - 1 === curM);
-    if (!inPeriod) continue;
-    if (tx.type === 'income')  income  += tx.amount;
-    if (tx.type === 'expense') expense += tx.amount;
-  }
-
-  const remaining = income - expense;
-  const pct       = income > 0 ? Math.max(0, Math.min(100, (remaining / income) * 100)) : 0;
-  const overflow   = expense > income && income > 0;
-
-  // ── Liquid level (SVG translateY — vase interior height 440 px) ──
-  const liquid = $('bowl-liquid');
-  if (liquid) liquid.style.transform = `translateY(${Math.round((100 - pct) / 100 * 440)}px)`;
-
-  // ── Centre: show balance ₹ amount (large) + % text (small) ───────
-  const valEl = $('bowl-pct-val');
-  const subEl = $('bowl-pct-sub');
-  const fmtBig = v => {
-    if (v >= 10000000) return `₹${(v/10000000).toFixed(2)}Cr`;
-    if (v >= 100000)   return `₹${(v/100000).toFixed(1)}L`;
-    if (v >= 1000)     return `₹${(v/1000).toFixed(1)}k`;
-    return `₹${v.toFixed(0)}`;
-  };
-  if (valEl) {
-    valEl.textContent = income === 0 ? '—' : fmtBig(Math.max(0, remaining));
-    valEl.style.color = overflow ? '#f87171' : '#fff';
-  }
-  if (subEl) {
-    if (income === 0)   subEl.textContent = 'add income to fill';
-    else if (overflow)  subEl.textContent = 'overspent!';
-    else                subEl.textContent = `${Math.round(pct)}%  remaining`;
-    subEl.style.color = overflow ? 'rgba(248,113,113,.7)' : 'rgba(147,197,253,.75)';
-  }
-
-  // ── Stats panel ───────────────────────────────────────────────────
-  const fmt2 = v => `₹${v.toFixed(2)}`;
-  const si = $('bowl-stat-income');
-  if (si) si.textContent = fmt2(income);
-  const ss = $('bowl-stat-spent');
-  if (ss) ss.textContent = fmt2(expense);
-  const sr = $('bowl-stat-remaining');
-  if (sr) {
-    sr.textContent = `${remaining < 0 ? '-' : ''}${fmt2(Math.abs(remaining))}`;
-    sr.style.color = remaining >= 0 ? '#60a5fa' : '#f87171';
-  }
-
-  // ── Alerts ───────────────────────────────────────────────────────
-  const ow = $('bowl-overflow-warn');
-  if (ow) ow.classList.toggle('hidden', !overflow);
-  const ni = $('bowl-no-income');
-  if (ni) ni.classList.toggle('hidden', income > 0);
-
-  // ── Filter buttons ────────────────────────────────────────────────
-  document.querySelectorAll('.bowl-filter-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.period === bowlPeriod));
-
-  // ── Drip on level drop ───────────────────────────────────────────
-  spawnBowlDrip();
-}
-
-// Brief drip splash animation when liquid level drops (SVG vase version)
-let lastBowlPct = null;
-function spawnBowlDrip() {
-  const liquid = $('bowl-liquid');
-  if (!liquid) return;
-  const tfm = liquid.style.transform || '';
-  const match = tfm.match(/translateY\(([\d.]+)px\)/);
-  const translatePx = match ? parseFloat(match[1]) : 440;
-  const curPct = Math.round((1 - translatePx / 440) * 100);
-  if (lastBowlPct !== null && curPct < lastBowlPct) {
-    const zone = $('vase-drip-zone');
-    if (zone) {
-      const drip = document.createElement('div');
-      drip.className = 'vase-drip-particle';
-      zone.appendChild(drip);
-      setTimeout(() => drip.remove(), 900);
-    }
-  }
-  lastBowlPct = curPct;
-}
-
-// Bowl filter click
-document.addEventListener('click', e => {
-  const btn = e.target.closest('.bowl-filter-btn');
-  if (!btn) return;
-  bowlPeriod = btn.dataset.period;
-  lastBowlPct = null; // reset drip tracker so we don't falsely trigger
-  renderMoneyBowl();
-});
 
 // ── Voice Input ────────────────────────────────────────────────────
 function initVoiceInput() {
@@ -2446,6 +2551,246 @@ function showToast(msg, type = 'success') {
   toastEl.className = `toast ${type} show`;
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3000);
 }
+
+// ── Paytm Import ───────────────────────────────────────────────────
+
+const PAYTM_CATEGORY_MAP = {
+  'food':               'Food',
+  'groceries':          'Grocery',
+  'grocery':            'Grocery',
+  'miscellaneous':      'Miscellaneous',
+  'money transfer':     'Transfer',
+  'travel':             'Travel',
+  'taxi':               'Travel',
+  'shopping':           'Shopping',
+  'entertainment':      'Entertainment',
+  'bill payments':      'Bills',
+  'financial services': 'Transfer',
+  'services':           'Miscellaneous',
+};
+
+const MERCHANT_OVERRIDES = [
+  { match: ['ghanashyam'],                        category: 'Food' },
+  { match: ['shivaram'],                          category: 'Miscellaneous' },
+  { match: ['bbnow', 'bigbasket', 'big basket'],  category: 'Grocery' },
+  { match: ['zepto'],                             category: 'Grocery' },
+  { match: ['blinkit'],                           category: 'Grocery' },
+  { match: ['swiggy instamart'],                  category: 'Grocery' },
+  { match: ['swiggy'],                            category: 'Food' },
+  { match: ['zomato'],                            category: 'Food' },
+  { match: ['ola', 'uber', 'rapido'],             category: 'Travel' },
+];
+
+function paytmCategoryFor(merchant, paytmTag) {
+  const ml = merchant.toLowerCase();
+  for (const o of MERCHANT_OVERRIDES) {
+    if (o.match.some(k => ml.includes(k))) return o.category;
+  }
+  // Tags look like "#🥘 Food" — strip # and any leading non-ASCII (emoji) to get plain text
+  const tagText = String(paytmTag).replace('#', '').replace(/[^\x00-\x7F]/g, '').trim().toLowerCase();
+  return PAYTM_CATEGORY_MAP[tagText] || 'Miscellaneous';
+}
+
+function parseExcelDate(val) {
+  if (typeof val === 'number') {
+    const d = new Date(Math.round((val - 25569) * 86400000));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+  }
+  const s = String(val).trim();
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    const yr = m[3].length === 2 ? '20'+m[3] : m[3];
+    return `${yr}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  }
+  const MONTHS = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+  m = s.match(/^(\d{1,2})[\s\-]([A-Za-z]{3})[\s\-']?(\d{2,4})$/);
+  if (m) {
+    const mo = MONTHS[m[2].toLowerCase()];
+    const yr = m[3].length === 2 ? '20'+m[3] : m[3];
+    if (mo) return `${yr}-${mo}-${m[1].padStart(2,'0')}`;
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
+function parsePaytmWorkbook(wb) {
+  // Find the sheet that contains transaction data (not the summary sheet)
+  let sheet = null;
+  for (const name of wb.SheetNames) {
+    const s = wb.Sheets[name];
+    const r = XLSX.utils.sheet_to_json(s, { header: 1, raw: true, defval: '' });
+    if (r.length && String(r[0][0]).trim().toLowerCase() === 'date') { sheet = s; break; }
+  }
+  if (!sheet) throw new Error('Could not find transaction data. Make sure this is the Paytm Excel statement (not PDF).');
+  const rows  = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+
+  let hIdx = -1;
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = 0; j < rows[i].length; j++) {
+      if (String(rows[i][j]).trim().toLowerCase() === 'date' &&
+          String(rows[i][j+1] || '').trim().toLowerCase() === 'time') {
+        hIdx = i; break;
+      }
+    }
+    if (hIdx !== -1) break;
+  }
+  if (hIdx === -1) throw new Error('Could not find transaction data. Make sure this is the Paytm Excel statement (not PDF).');
+
+  const headers  = rows[hIdx].map(h => String(h).trim());
+  const col      = name => headers.indexOf(name);
+  const iDate    = col('Date');
+  const iTime    = col('Time');
+  const iDetails = col('Transaction Details');
+  const iAmount  = col('Amount');
+  const iUpiRef  = col('UPI Ref No.');
+  const iTags    = col('Tags');
+  const iComment = col('Comment');
+
+  const result = [];
+  for (let i = hIdx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[iDate]) continue;
+    const amtRaw = parseFloat(String(r[iAmount]).replace(/,/g, ''));
+    if (isNaN(amtRaw) || amtRaw === 0) continue;
+
+    const merchant = String(r[iDetails] || '').trim();
+    const tag      = String(r[iTags]    || '').trim();
+    const upiRef   = String(r[iUpiRef]  || '').trim();
+    const comment  = String(r[iComment] || '').trim();
+    const timeStr  = String(r[iTime]    || '').slice(0, 5);
+
+    result.push({
+      date:     parseExcelDate(r[iDate]),
+      time:     timeStr,
+      merchant,
+      amount:   Math.abs(amtRaw),
+      type:     amtRaw < 0 ? 'expense' : 'income',
+      category: paytmCategoryFor(merchant, tag),
+      upiRef,
+      note:     [timeStr, comment].filter(Boolean).join(' · ') || 'Paytm Import',
+    });
+  }
+  return result;
+}
+
+let paytmParsed = [];
+
+function renderImportPreview(rows) {
+  const existing = new Set(transactions.filter(t => t.upiRef).map(t => t.upiRef));
+  const fresh    = rows.filter(r => !r.upiRef || !existing.has(r.upiRef));
+  const dupes    = rows.length - fresh.length;
+  paytmParsed    = fresh;
+
+  const preview = $('import-preview');
+  preview.classList.remove('hidden');
+
+  if (!fresh.length) {
+    $('import-count-text').textContent = 'All transactions already imported';
+    $('import-range-text').textContent  = '';
+    $('import-dupe-badge').classList.add('hidden');
+    $('import-category-breakdown').innerHTML = '';
+    const btn = $('import-confirm-btn');
+    btn.disabled = true;
+    $('import-confirm-label').textContent = 'Nothing new to import';
+    lucide.createIcons();
+    return;
+  }
+
+  const fmtDate = d => {
+    const [, mo, day] = d.split('-');
+    return `${+day} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo-1]}`;
+  };
+  const dates = fresh.map(r => r.date).sort();
+  const range = dates[0] === dates[dates.length-1]
+    ? fmtDate(dates[0])
+    : `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length-1])}`;
+
+  $('import-count-text').textContent = `${fresh.length} transaction${fresh.length !== 1 ? 's' : ''} ready to import`;
+  $('import-range-text').textContent  = range;
+
+  const dupeBadge = $('import-dupe-badge');
+  if (dupes > 0) { dupeBadge.textContent = `${dupes} already imported — skipped`; dupeBadge.classList.remove('hidden'); }
+  else dupeBadge.classList.add('hidden');
+
+  const cats = {};
+  fresh.forEach(r => { cats[r.category] = (cats[r.category] || 0) + 1; });
+  const sorted   = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+  const maxCount = sorted[0]?.[1] || 1;
+  $('import-category-breakdown').innerHTML = sorted.map(([cat, count]) => `
+    <div class="import-cat-row">
+      <span class="import-cat-name">${CATEGORY_EMOJI[cat] || '•'} ${cat}</span>
+      <div class="import-cat-bar-wrap">
+        <div class="import-cat-bar" style="width:${Math.round((count/maxCount)*100)}%;background:${CATEGORY_COLORS[cat]||'#6b7280'}"></div>
+      </div>
+      <span class="import-cat-count">${count}</span>
+    </div>`).join('');
+
+  const btn = $('import-confirm-btn');
+  btn.disabled = false;
+  $('import-confirm-label').textContent = `Import ${fresh.length} Transaction${fresh.length !== 1 ? 's' : ''}`;
+  lucide.createIcons();
+}
+
+async function executeImport() {
+  if (!paytmParsed.length) return;
+  const btn = $('import-confirm-btn');
+  btn.disabled = true;
+  $('import-confirm-label').textContent = 'Importing…';
+
+  paytmParsed.forEach(r => {
+    const tx = { id: crypto.randomUUID(), type: r.type, amount: r.amount, date: r.date, category: r.category, paymentMode: 'upi', note: r.note };
+    if (r.merchant) tx.payee  = r.merchant;
+    if (r.upiRef)   tx.upiRef = r.upiRef;
+    transactions.push(tx);
+  });
+
+  await saveData();
+  updateDashboard();
+
+  const count  = paytmParsed.length;
+  paytmParsed  = [];
+  $('import-preview').classList.add('hidden');
+  $('import-drop-zone').classList.remove('hidden');
+  $('import-file-input').value = '';
+  showToast(`✅ ${count} transactions imported!`);
+  showSection('dashboard');
+}
+
+$('import-drop-zone')?.addEventListener('click', () => $('import-file-input')?.click());
+
+function showImportError(msg) {
+  let el = $('import-inline-error');
+  if (!el) {
+    el = document.createElement('p');
+    el.id = 'import-inline-error';
+    el.style.cssText = 'color:#ef4444;margin-top:12px;font-size:14px;text-align:center;';
+    $('import-drop-zone').after(el);
+  }
+  el.textContent = '⚠️ ' + msg;
+}
+
+$('import-file-input')?.addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const el = $('import-inline-error');
+  if (el) el.textContent = '';
+  if (typeof XLSX === 'undefined') {
+    showImportError('Excel library failed to load. Open the app via a local server or check your internet connection.');
+    return;
+  }
+  try {
+    const buf = await file.arrayBuffer();
+    const wb  = XLSX.read(buf, { type: 'array' });
+    const rows = parsePaytmWorkbook(wb);
+    if (!rows.length) { showImportError('No transactions found. Make sure this is the Paytm Excel statement.'); return; }
+    $('import-drop-zone').classList.add('hidden');
+    renderImportPreview(rows);
+  } catch (err) {
+    showImportError(err.message || 'Could not read file.');
+    console.error(err);
+  }
+});
+
+$('import-confirm-btn')?.addEventListener('click', executeImport);
 
 // ── Init ───────────────────────────────────────────────────────────
 lucide.createIcons();

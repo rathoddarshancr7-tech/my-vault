@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Vault</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="module" src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden">
+        <i data-lucide="bell" class="toast-icon"></i>
+        <span id="toast-message">Message</span>
+    </div>
+    <!-- Login Vault -->
+    <div id="vault-screen" class="screen active">
+        <div class="glass-card vault-card">
+            <div class="vault-icon-wrapper">
+                <i data-lucide="lock" class="vault-icon"></i>
+            </div>
+            <h1>Expense Vault</h1>
+            <p>Enter your password to unlock your local data.</p>
+            <div class="input-group">
+                <input type="password" id="vault-password" placeholder="Password">
+                <button id="unlock-btn" class="btn primary">Unlock Vault</button>
+            </div>
+            <p id="vault-error" class="error-text hidden">Incorrect password.</p>
+        </div>
+    </div>
+    <!-- Dashboard -->
+    <div id="dashboard-screen" class="screen hidden">
+        <nav class="navbar glass-card">
+            <div class="logo">
+                <i data-lucide="wallet"></i>
+                <h2>Vault</h2>
+            </div>
+            <button id="lock-btn" class="btn icon-btn"><i data-lucide="log-out"></i></button>
+        </nav>
+        <main class="dashboard-content">
+            <!-- Weekly Reminder Alert -->
+            <div id="weekly-reminder" class="glass-card alert hidden">
+                <div class="alert-icon"><i data-lucide="alert-circle"></i></div>
+                <div class="alert-content">
+                    <h3>Weekly Reminder</h3>
+                    <p>It's been over 7 days since your last entry. Don't forget to track your expenses!</p>
+                </div>
+                <button id="dismiss-reminder-btn" class="btn icon-btn"><i data-lucide="x"></i></button>
+            </div>
+            <!-- Summary Cards -->
+            <div class="summary-grid">
+                <div class="glass-card stat-card">
+                    <div class="stat-header">
+                        <h3>Total Income</h3>
+                        <div class="icon-wrapper green"><i data-lucide="trending-up"></i></div>
+                    </div>
+                    <h2 id="total-income" class="stat-value text-green">$0.00</h2>
+                </div>
+                <div class="glass-card stat-card">
+                    <div class="stat-header">
+                        <h3>Total Expenses</h3>
+                        <div class="icon-wrapper red"><i data-lucide="trending-down"></i></div>
+                    </div>
+                    <h2 id="total-expense" class="stat-value text-red">$0.00</h2>
+                </div>
+                <div class="glass-card stat-card">
+                    <div class="stat-header">
+                        <h3>Net Savings</h3>
+                        <div class="icon-wrapper blue"><i data-lucide="piggy-bank"></i></div>
+                    </div>
+                    <h2 id="total-savings" class="stat-value text-blue">$0.00</h2>
+                </div>
+            </div>
+            <div class="main-grid">
+                <!-- Charts Section -->
+                <div class="glass-card chart-section">
+                    <h3>Spending by Category</h3>
+                    <div class="chart-container">
+                        <canvas id="expenseChart"></canvas>
+                    </div>
+                </div>
+                <!-- Add Transaction Section -->
+                <div class="glass-card form-section">
+                    <h3>Add Transaction</h3>
+                    <form id="transaction-form">
+                        <div class="form-group">
+                            <label>Type</label>
+                            <div class="type-toggle">
+                                <input type="radio" id="type-expense" name="type" value="expense" checked>
+                                <label for="type-expense">Expense</label>
+                                <input type="radio" id="type-income" name="type" value="income">
+                                <label for="type-income">Income</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="amount">Amount</label>
+                            <div class="input-with-icon">
+                                <span>$</span>
+                                <input type="number" id="amount" step="0.01" required placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="form-group" id="category-group">
+                            <label for="category">Category</label>
+                            <select id="category" required>
+                                <option value="Food">Food</option>
+                                <option value="Travel">Travel</option>
+                                <option value="Rent">Rent</option>
+                                <option value="Electricity">Electricity</option>
+                                <option value="Grocery">Grocery</option>
+                                <option value="Shopping">Shopping</option>
+                                <option value="Miscellaneous">Miscellaneous</option>
+                                <option value="Lending Money">Lending Money</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="date">Date</label>
+                            <input type="date" id="date" required>
+                        </div>
+                        <button type="submit" class="btn primary full-width">Add Transaction</button>
+                    </form>
+                </div>
+            </div>
+            <!-- Recent Transactions -->
+            <div class="glass-card list-section">
+                <h3>Recent Transactions</h3>
+                <div class="transaction-list" id="transaction-list">
+                    <!-- Transactions will be rendered here via JS -->
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+    <script>
+      lucide.createIcons();
+    </script>
+</body>
+</html>

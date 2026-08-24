@@ -21,6 +21,7 @@
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -130,9 +131,6 @@
         <button class="nav-item active" data-section="dashboard">
           <i data-lucide="layout-dashboard"></i><span>Dashboard</span>
         </button>
-        <button class="nav-item" data-section="add">
-          <i data-lucide="plus-circle"></i><span>Add Transaction</span>
-        </button>
         <button class="nav-item" data-section="history">
           <i data-lucide="history"></i><span>History</span>
         </button>
@@ -145,11 +143,11 @@
         <button class="nav-item" data-section="budget">
           <i data-lucide="target"></i><span>Budget Planner</span>
         </button>
-        <button class="nav-item" data-section="moneybowl">
-          <i data-lucide="glass-water"></i><span>Money Bowl</span>
-        </button>
         <button class="nav-item" data-section="bills">
           <i data-lucide="receipt"></i><span>Bills &amp; Receipts</span>
+        </button>
+        <button class="nav-item" data-section="import">
+          <i data-lucide="file-spreadsheet"></i><span>Import Paytm</span>
         </button>
       </nav>
 
@@ -157,12 +155,20 @@
         <button class="nav-item" id="dark-mode-btn">
           <i data-lucide="moon"></i><span>Dark Mode</span>
         </button>
-        <button class="nav-item" id="export-btn">
-          <i data-lucide="file-down"></i><span>Export PDF</span>
-        </button>
-        <button class="nav-item" id="export-csv-btn">
-          <i data-lucide="file-spreadsheet"></i><span>Export CSV</span>
-        </button>
+        <div class="export-group">
+          <button class="nav-item" id="export-toggle-btn">
+            <i data-lucide="file-down"></i><span>Export</span>
+            <i data-lucide="chevron-right" class="export-chevron"></i>
+          </button>
+          <div id="export-submenu" class="export-submenu hidden">
+            <button class="nav-item export-sub-item" id="export-btn">
+              <i data-lucide="file-text"></i><span>Export PDF</span>
+            </button>
+            <button class="nav-item export-sub-item" id="export-csv-btn">
+              <i data-lucide="file-spreadsheet"></i><span>Export CSV</span>
+            </button>
+          </div>
+        </div>
         <button class="nav-item" id="backup-btn">
           <i data-lucide="hard-drive-download"></i><span>Backup Vault</span>
         </button>
@@ -357,8 +363,27 @@
               <button class="btn ghost small" data-section="history">View all →</button>
             </div>
             <div class="transaction-list" id="recent-list">
-              <div class="empty-state"><i data-lucide="inbox"></i><p>No transactions yet.</p></div>
+              <div class="empty-state">
+                <svg viewBox="0 0 120 100" class="empty-svg" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="10" y="20" width="100" height="65" rx="10" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.5"/>
+                  <rect x="22" y="36" width="40" height="8" rx="4" fill="var(--border)"/>
+                  <rect x="22" y="52" width="60" height="8" rx="4" fill="var(--border)"/>
+                  <rect x="22" y="68" width="50" height="8" rx="4" fill="var(--border)"/>
+                  <circle cx="90" cy="36" r="8" fill="var(--accent)" opacity=".18"/>
+                  <circle cx="90" cy="52" r="8" fill="var(--accent)" opacity=".18"/>
+                  <circle cx="90" cy="68" r="8" fill="var(--accent)" opacity=".18"/>
+                </svg>
+                <p>No transactions yet.<br><span style="font-size:.8rem;opacity:.6">Tap + to add your first one</span></p>
+              </div>
             </div>
+          </div>
+
+          <div class="card hidden" id="dash-budget-card">
+            <div class="card-header">
+              <h3>Budget Overview</h3>
+              <button class="btn ghost small" data-section="budget">Edit →</button>
+            </div>
+            <div id="dash-budget-list"></div>
           </div>
         </section>
 
@@ -465,6 +490,10 @@
                     <option value="Shopping">🛍️ Shopping</option>
                     <option value="Miscellaneous">📦 Miscellaneous</option>
                     <option value="Lending Money">💸 Lending Money</option>
+                    <option value="Lunch">🍽️ Lunch</option>
+                    <option value="Transfer">💳 Transfer</option>
+                    <option value="Bills">📄 Bills</option>
+                    <option value="Entertainment">🎭 Entertainment</option>
                   </select>
                 </div>
               </div>
@@ -555,6 +584,10 @@
                   <option value="Shopping">Shopping</option>
                   <option value="Miscellaneous">Miscellaneous</option>
                   <option value="Lending Money">Lending Money</option>
+                  <option value="Lunch">Lunch</option>
+                  <option value="Transfer">Transfer</option>
+                  <option value="Bills">Bills</option>
+                  <option value="Entertainment">Entertainment</option>
                 </select>
                 <select id="filter-mode" class="filter-select">
                   <option value="all">All Modes</option>
@@ -574,8 +607,19 @@
               </div>
             </div>
             <p id="history-count" class="history-count"></p>
+            <div id="ptr-indicator" class="ptr-indicator hidden">
+              <svg class="ptr-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <span>Release to refresh</span>
+            </div>
             <div class="transaction-list" id="history-list">
-              <div class="empty-state"><i data-lucide="inbox"></i><p>No transactions yet.</p></div>
+              <div class="empty-state">
+                <svg viewBox="0 0 120 100" class="empty-svg" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="60" cy="42" r="28" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.5"/>
+                  <path d="M48 42 l8 8 l16-16" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".4"/>
+                  <rect x="20" y="78" width="80" height="8" rx="4" fill="var(--border)"/>
+                </svg>
+                <p>No transactions match.<br><span style="font-size:.8rem;opacity:.6">Try clearing filters</span></p>
+              </div>
             </div>
           </div>
         </section>
@@ -655,227 +699,39 @@
           </div>
         </section>
 
-        <!-- ── MONEY BOWL (Crystal Vase) ────────── -->
-        <section id="section-moneybowl" class="section">
-          <div class="vasepage">
 
-            <!-- Period toggle -->
-            <div class="vase-period-row">
-              <button class="bowl-filter-btn active" data-period="month">This Month</button>
-              <button class="bowl-filter-btn" data-period="all">All Time</button>
+        <!-- ── IMPORT PAYTM ──────────────────────── -->
+        <section id="section-import" class="section">
+          <div class="card import-card">
+            <div class="card-header">
+              <h3>Import from Paytm</h3>
             </div>
-
-            <!-- Crystal vase scene -->
-            <div class="vase-scene">
-              <div class="vase-ambient"></div>
-
-              <div class="vase-svg-wrap">
-
-                <svg class="vase-svg" viewBox="0 0 300 480"
-                     xmlns="http://www.w3.org/2000/svg" overflow="visible">
-                  <defs>
-
-                    <!-- Sapphire liquid gradient -->
-                    <linearGradient id="liqGrad" x1="0" y1="1" x2="0" y2="0">
-                      <stop offset="0%"   stop-color="#1e3a8a"/>
-                      <stop offset="35%"  stop-color="#2563eb"/>
-                      <stop offset="70%"  stop-color="#3b82f6"/>
-                      <stop offset="100%" stop-color="#60a5fa" stop-opacity="0.92"/>
-                    </linearGradient>
-
-                    <!-- Radial inner glow for liquid -->
-                    <radialGradient id="liqGlow" cx="50%" cy="20%" r="55%">
-                      <stop offset="0%"   stop-color="#93c5fd" stop-opacity="0.32"/>
-                      <stop offset="100%" stop-color="#1e40af" stop-opacity="0"/>
-                    </radialGradient>
-
-                    <!-- Glass body shimmer -->
-                    <linearGradient id="glassGrad" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%"   stop-color="rgba(255,255,255,0.07)"/>
-                      <stop offset="18%"  stop-color="rgba(255,255,255,0.14)"/>
-                      <stop offset="50%"  stop-color="rgba(255,255,255,0.025)"/>
-                      <stop offset="82%"  stop-color="rgba(255,255,255,0.10)"/>
-                      <stop offset="100%" stop-color="rgba(255,255,255,0.04)"/>
-                    </linearGradient>
-
-                    <!-- Clip path: vase interior (walls ~10 px thick) -->
-                    <clipPath id="vase-clip">
-                      <path d="M 118,20
-                               C 113,20 100,30 98,54
-                               C 78,90 64,148 66,206
-                               C 68,256 72,304 84,348
-                               C 94,382 110,400 118,410
-                               C 122,420 122,430 116,440
-                               C 110,444 102,446 98,452
-                               L 98,460 L 202,460 L 202,452
-                               C 198,446 190,444 184,440
-                               C 178,430 178,420 182,410
-                               C 190,400 206,382 216,348
-                               C 228,304 232,256 234,206
-                               C 236,148 222,90 202,54
-                               C 200,30 187,20 182,20 Z"/>
-                    </clipPath>
-
-                  </defs>
-
-                  <!-- Ground reflection / shadow ellipse -->
-                  <ellipse cx="150" cy="473" rx="70" ry="9"
-                           fill="rgba(37,99,235,0.2)"/>
-
-                  <!-- Outer glass shape -->
-                  <path d="M 110,10
-                           C 105,10 90,22 88,48
-                           C 66,86 50,146 52,206
-                           C 54,258 58,308 70,354
-                           C 80,390 98,410 108,420
-                           C 114,430 114,440 108,450
-                           C 102,454 92,456 88,464
-                           L 88,470 L 212,470 L 212,464
-                           C 208,456 198,454 192,450
-                           C 186,440 186,430 192,420
-                           C 202,410 220,390 230,354
-                           C 242,308 246,258 248,206
-                           C 250,146 234,86 212,48
-                           C 210,22 195,10 190,10 Z"
-                        fill="url(#glassGrad)"
-                        stroke="rgba(147,197,253,0.18)"
-                        stroke-width="1.5"/>
-
-                  <!-- Liquid (clipped to vase interior) -->
-                  <g clip-path="url(#vase-clip)">
-                    <g id="bowl-liquid"
-                       style="transform:translateY(440px);transition:transform 1.4s cubic-bezier(.4,0,.2,1);will-change:transform">
-
-                      <!-- Liquid fill -->
-                      <rect x="0" y="0" width="300" height="480" fill="url(#liqGrad)"/>
-                      <!-- Inner glow -->
-                      <rect x="0" y="0" width="300" height="480" fill="url(#liqGlow)"/>
-
-                      <!-- Wave 1 (main) -->
-                      <path class="vase-wave-1"
-                            d="M-20,5 C10,-8 70,18 110,5 C150,-8 210,18 250,5
-                               C290,-8 350,18 390,5 L390,22 L-20,22 Z"
-                            fill="rgba(96,165,250,0.62)"/>
-                      <!-- Wave 2 (secondary) -->
-                      <path class="vase-wave-2"
-                            d="M-20,5 C20,18 80,-8 120,5 C160,18 220,-8 260,5
-                               C300,18 360,-8 400,5 L400,22 L-20,22 Z"
-                            fill="rgba(147,197,253,0.36)"/>
-
-                      <!-- Floating light particles -->
-                      <circle class="vp1" cx="82"  cy="210" r="2.8" fill="rgba(147,197,253,0.65)"/>
-                      <circle class="vp2" cx="186" cy="292" r="2"   fill="rgba(219,234,254,0.55)"/>
-                      <circle class="vp3" cx="128" cy="352" r="2.4" fill="rgba(147,197,253,0.45)"/>
-                      <circle class="vp4" cx="200" cy="186" r="1.6" fill="rgba(255,255,255,0.35)"/>
-                      <circle class="vp5" cx="102" cy="396" r="2"   fill="rgba(147,197,253,0.5)"/>
-
-                    </g>
-                  </g>
-
-                  <!-- Glass wall stroke (renders over liquid) -->
-                  <path d="M 110,10
-                           C 105,10 90,22 88,48
-                           C 66,86 50,146 52,206
-                           C 54,258 58,308 70,354
-                           C 80,390 98,410 108,420
-                           C 114,430 114,440 108,450
-                           C 102,454 92,456 88,464
-                           L 88,470 L 212,470 L 212,464
-                           C 208,456 198,454 192,450
-                           C 186,440 186,430 192,420
-                           C 202,410 220,390 230,354
-                           C 242,308 246,258 248,206
-                           C 250,146 234,86 212,48
-                           C 210,22 195,10 190,10 Z"
-                        fill="none"
-                        stroke="rgba(255,255,255,0.12)"
-                        stroke-width="2"/>
-
-                  <!-- Primary left glass reflection streak -->
-                  <path d="M 118,22 C 108,60 98,122 100,192 C 102,252 106,302 114,342"
-                        fill="none"
-                        stroke="rgba(255,255,255,0.5)"
-                        stroke-width="4.5"
-                        stroke-linecap="round"
-                        opacity="0.62"/>
-
-                  <!-- Secondary thin streak -->
-                  <path d="M 128,22 C 120,55 114,112 116,172"
-                        fill="none"
-                        stroke="rgba(255,255,255,0.22)"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        opacity="0.52"/>
-
-                  <!-- Right edge shimmer -->
-                  <path d="M 184,22 C 188,52 192,102 190,158"
-                        fill="none"
-                        stroke="rgba(255,255,255,0.16)"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        opacity="0.38"/>
-
-                  <!-- Glare orb (top-left of glass) -->
-                  <ellipse cx="124" cy="34" rx="13" ry="7"
-                           fill="rgba(255,255,255,0.42)"
-                           transform="rotate(-18,124,34)"/>
-                  <!-- Specular dot -->
-                  <circle cx="118" cy="26" r="3.5" fill="rgba(255,255,255,0.72)"/>
-
-                  <!-- Rim ellipse (top opening) -->
-                  <ellipse cx="150" cy="12" rx="42" ry="5.5"
-                           fill="rgba(96,165,250,0.1)"
-                           stroke="rgba(255,255,255,0.28)" stroke-width="1.5"/>
-
-                  <!-- Base ring -->
-                  <ellipse cx="150" cy="466" rx="66" ry="7"
-                           fill="none"
-                           stroke="rgba(147,197,253,0.18)" stroke-width="1"/>
-
-                </svg>
-
-                <!-- Centre text (HTML overlaid on SVG belly) -->
-                <div class="vase-center-text">
-                  <div class="vase-main-val" id="bowl-pct-val">—</div>
-                  <div class="vase-sub-txt" id="bowl-pct-sub">remaining</div>
+            <p class="import-desc">Download your Paytm statement as Excel and import here. Do it once a month — zero daily effort.</p>
+            <ol class="import-steps">
+              <li>Open Paytm → Balance &amp; History → Request Statement</li>
+              <li>Select time range → Format: <strong>Excel</strong> → Download</li>
+              <li>Come back here and tap the box below</li>
+            </ol>
+            <div class="upload-zone" id="import-drop-zone">
+              <i data-lucide="file-spreadsheet" class="upload-icon"></i>
+              <p>Tap to pick your Paytm Excel file</p>
+              <p class="upload-hint">.xlsx · Processed on your device · Nothing sent anywhere</p>
+              <input type="file" id="import-file-input" accept=".xlsx,.xls" hidden>
+            </div>
+            <div id="import-preview" class="hidden">
+              <div class="import-preview-header">
+                <div>
+                  <p class="import-count-text" id="import-count-text"></p>
+                  <p class="import-range-text" id="import-range-text"></p>
                 </div>
-
-                <!-- Drip zone (drop particles when spending) -->
-                <div id="vase-drip-zone" class="vase-drip-zone"></div>
-
-              </div><!-- /vase-svg-wrap -->
-            </div><!-- /vase-scene -->
-
-            <!-- Alerts -->
-            <div id="bowl-overflow-warn" class="lux-alert lux-warn hidden">
-              ⚠️ Spending exceeds income this period
-            </div>
-            <div id="bowl-no-income" class="lux-alert lux-hint">
-              Add income transactions to fill the vase
-            </div>
-
-            <!-- Stats panel -->
-            <div class="vase-stats-panel">
-              <div class="vase-stat-item">
-                <span class="vase-stat-lbl">Income</span>
-                <span class="vase-stat-num" id="bowl-stat-income">₹0.00</span>
+                <span id="import-dupe-badge" class="import-dupe-badge hidden"></span>
               </div>
-              <div class="vase-stat-sep"></div>
-              <div class="vase-stat-item">
-                <span class="vase-stat-lbl">Spent</span>
-                <span class="vase-stat-num" id="bowl-stat-spent">₹0.00</span>
-              </div>
-              <div class="vase-stat-sep"></div>
-              <div class="vase-stat-item">
-                <span class="vase-stat-lbl">Remaining</span>
-                <span class="vase-stat-num" id="bowl-stat-remaining">₹0.00</span>
-              </div>
+              <div id="import-category-breakdown" class="import-cat-breakdown"></div>
+              <button id="import-confirm-btn" class="btn primary full-width" style="margin-top:16px">
+                <i data-lucide="download"></i>
+                <span id="import-confirm-label">Import Transactions</span>
+              </button>
             </div>
-
-            <!-- Hidden: keeps JS IDs working -->
-            <span id="bowl-income-label" style="display:none"></span>
-            <span id="bowl-spent-label"  style="display:none"></span>
-
           </div>
         </section>
 
@@ -902,7 +758,7 @@
         <button class="bnav-item" data-section="history">
           <i data-lucide="history"></i><span>History</span>
         </button>
-        <button class="bnav-fab" data-section="add">
+        <button class="bnav-fab" id="bnav-fab-btn">
           <i data-lucide="plus"></i>
         </button>
         <button class="bnav-item" data-section="bills">
@@ -1043,5 +899,30 @@
       });
     }
   </script>
+
+  <!-- ── QUICK-ADD BOTTOM SHEET ───────────────────────────────────── -->
+  <div id="qas-backdrop" class="qas-backdrop hidden"></div>
+  <div id="qas-sheet" class="qas-sheet" aria-hidden="true">
+    <div class="qas-handle-bar"></div>
+    <div class="qas-header">
+      <span class="qas-title">Quick Add</span>
+      <button id="qas-close-btn" class="qas-close-btn"><i data-lucide="x"></i></button>
+    </div>
+    <div class="qas-type-row">
+      <button class="qas-type-btn active" data-qtype="expense">💸 Expense</button>
+      <button class="qas-type-btn" data-qtype="income">💰 Income</button>
+    </div>
+    <div class="qas-amount-wrap">
+      <span class="qas-currency">₹</span>
+      <input type="number" id="qas-amount" class="qas-amount-input" placeholder="0.00" step="0.01" min="0.01" inputmode="decimal">
+    </div>
+    <p class="qas-field-label">Category</p>
+    <div class="qas-cat-grid" id="qas-cat-grid"></div>
+    <div class="qas-row">
+      <input type="text" id="qas-note" class="qas-input" placeholder="Note (optional)">
+      <input type="date" id="qas-date" class="qas-input qas-date-input">
+    </div>
+    <button id="qas-submit-btn" class="qas-submit-btn">Save Transaction</button>
+  </div>
 </body>
 </html>
